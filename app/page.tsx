@@ -1,69 +1,109 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect } from 'react';
+import { LeaderboardResponse } from '@/lib/types';
+import { TopPodium } from '@/components/TopPodium';
+import { LeaderboardTable } from '@/components/LeaderboardTable';
+import { LeaderboardHeader } from '@/components/LeaderboardHeader';
+import { ScoringGuideV2 } from '@/components/ScoringGuideV2';
+import { Loader2, Zap } from 'lucide-react';
+
+export default function LeaderboardPage() {
+  const [data, setData] = useState<LeaderboardResponse | null>(null);
+  const [filter, setFilter] = useState<'this_month' | 'all' | 'custom'>('this_month');
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState('');
+
+  const fetchData = async () => {
+    try {
+      const res = await fetch(`/api/leaderboard?filter=${filter}`);
+      if (!res.ok) throw new Error('Failed to fetch data');
+      const json: LeaderboardResponse = await res.json();
+      setData(json);
+      setLastUpdated(new Date().toLocaleTimeString('id-ID'));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto Polling setiap 30 detik untuk TV Display
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [filter]);
+
+  if (loading && !data) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center text-neutral-400 gap-3">
+        <Loader2 className="w-10 h-10 animate-spin text-yellow-500" />
+        <span className="font-mono text-sm tracking-widest uppercase">Loading Arena Leaderboard...</span>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const chasers = data.leaderboard.slice(3); // Rank #4 ke bawah
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between selection:bg-yellow-500 selection:text-black">
+      <div className="max-w-[1700px] w-full mx-auto p-4 lg:p-8 space-y-6 flex-1">
+        {/* 1. Header Bar */}
+        <LeaderboardHeader
+          data={data}
+          filter={filter}
+          setFilter={setFilter}
+          lastUpdated={lastUpdated}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        {/* 2. Scoring System Guide (Compact TV Edition) */}
+        <ScoringGuideV2 />
+
+        {/* 3. Top 3 Podium Cards */}
+        <section className="pt-2">
+          <TopPodium podium={data.podium} />
+        </section>
+
+        {/* 3. Table Ranks #4 ke bawah */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm uppercase font-bold tracking-wider text-neutral-400">
+              Rank Division #4 — #{data.leaderboard.length} (The Chasers)
+            </h2>
+            <span className="text-xs font-mono text-neutral-500">
+              Showing {chasers.length} Developers
+            </span>
+          </div>
+          <LeaderboardTable chasers={chasers} />
+        </section>
+      </div>
+
+      {/* 4. Live Ticker Footer */}
+      {data.latestActivity.length > 0 && (
+        <footer className="sticky bottom-0 z-50 w-full bg-neutral-950/90 backdrop-blur-md border-t border-neutral-800/80 py-3 shadow-2xl">
+          <div className="max-w-[1700px] w-full mx-auto px-4 lg:px-8 flex items-center gap-3 text-xs text-neutral-400 overflow-hidden">
+            <span className="flex items-center gap-1 font-bold text-yellow-400 shrink-0 uppercase tracking-wider">
+              <Zap className="w-3.5 h-3.5 fill-yellow-400" /> Latest Submissions:
+            </span>
+            <div className="truncate font-mono">
+              {data.latestActivity.map((act, i) => (
+                <span key={i} className="mr-6">
+                  <span className="text-neutral-200 font-semibold">{act.developer}</span> shipped{' '}
+                  <span className="text-neutral-400 italic">"{act.taskTitle}"</span>{' '}
+                  {act.isOnTime ? (
+                    <span className="text-emerald-400 font-bold">[ON-TIME]</span>
+                  ) : (
+                    <span className="text-rose-400 font-bold">[LATE]</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        </footer>
+      )}
+    </main>
   );
 }
