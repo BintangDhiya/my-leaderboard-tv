@@ -74,12 +74,32 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
     return devMap;
 }
 
+export const DEFAULT_EXCLUDED_NAMES: string[] = [
+    'BAGAS EKO PRASETYO',
+    'ADI PRANOTO',
+    'FEBRIANTO JAYA WARDANA',
+    'SUGIYANTO PAMA',
+    'RIDHWAN WAHYUDI',
+    'TUBAGUS MAULANA AGHNI',
+    'OKTAVIA NUR AZIZAH',
+    'TEGAR NAUFAL HANIP',
+    'MUHAMMAD FAUZAN ACYUTO',
+    'MOHAMAD BAYU AFRIANSYAH',
+    'DESTRY ZUMAR SASTIANI',
+];
+
 export function generateLeaderboard(
     allTasks: RawTask[],
     filterType: 'all' | 'this_month' | 'custom' = 'this_month',
     customStart?: string,
-    customEnd?: string
+    customEnd?: string,
+    excludedNames: string[] = DEFAULT_EXCLUDED_NAMES
 ): LeaderboardResponse {
+    const excludedSet = new Set(excludedNames.map((name) => name.trim().toUpperCase()));
+    const validTasks = excludedSet.size > 0
+        ? allTasks.filter((t) => !excludedSet.has((t.nama || '').trim().toUpperCase()))
+        : allTasks;
+
     const now = new Date();
 
     let filterStartDate: Date | null = null;
@@ -95,13 +115,13 @@ export function generateLeaderboard(
 
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const currentPeriodTasks = allTasks.filter((t) => {
+    const currentPeriodTasks = validTasks.filter((t) => {
         if (!filterStartDate || !filterEndDate) return true;
         const taskDate = t.closed_on ? new Date(t.closed_on) : new Date(t.created_on);
         return taskDate >= filterStartDate && taskDate <= filterEndDate;
     });
 
-    const yesterdayTasks = allTasks.filter((t) => {
+    const yesterdayTasks = validTasks.filter((t) => {
         if (!t.closed_on) return false;
         const closedDate = new Date(t.closed_on);
         const inFilterRange = (!filterStartDate || closedDate >= filterStartDate);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseCSVData, generateLeaderboard } from '@/lib/scoreCalculator';
+import { parseCSVData, generateLeaderboard, DEFAULT_EXCLUDED_NAMES } from '@/lib/scoreCalculator';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,9 +9,16 @@ export async function GET(request: NextRequest) {
         const filter = (searchParams.get('filter') || 'this_month') as 'all' | 'this_month' | 'custom';
         const startDate = searchParams.get('start') || undefined;
         const endDate = searchParams.get('end') || undefined;
+        const includeAll = searchParams.get('includeAll') === 'true';
 
         const rawTasks = parseCSVData();
-        const leaderboardData = generateLeaderboard(rawTasks, filter, startDate, endDate);
+        const leaderboardData = generateLeaderboard(
+            rawTasks,
+            filter,
+            startDate,
+            endDate,
+            includeAll ? [] : DEFAULT_EXCLUDED_NAMES
+        );
 
         return NextResponse.json(leaderboardData, { status: 200 });
     } catch (error) {
