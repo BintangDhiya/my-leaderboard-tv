@@ -23,7 +23,7 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
                         <Radio className="w-3.5 h-3.5" /> LIVE DISPLAY
                     </div>
-                    <h1 className="text-2xl lg:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-neutral-100 via-neutral-300 to-neutral-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl lg:text-3xl font-black uppercase tracking-wider bg-clip-text">
                         Performance Leaderboard
                     </h1>
                 </div>
