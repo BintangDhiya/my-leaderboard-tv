@@ -20,7 +20,7 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
             {/* Title & Live Badge */}
             <div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold animate-pulse">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
                         <Radio className="w-3.5 h-3.5" /> LIVE DISPLAY
                     </div>
                     <h1 className="text-2xl lg:text-3xl font-black uppercase tracking-wider bg-gradient-to-r from-neutral-100 via-neutral-300 to-neutral-400 bg-clip-text text-transparent">
@@ -37,7 +37,7 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                 {/* Rising Star Alert jika ada */}
                 {data.risingStar && (
                     <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
-                        <Flame className="w-4 h-4 text-amber-400 animate-bounce" />
+                        <Flame className="w-4 h-4 text-amber-400" />
                         <span>Rising Star: {data.risingStar.name} (▲ +{data.risingStar.rankDelta})</span>
                     </div>
                 )}
