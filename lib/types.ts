@@ -34,7 +34,8 @@ export interface DeveloperStats {
     currentRank: number;
     previousRank: number;
     rankDelta: number; // Positif (naik / hijau), Negatif (turun / merah), 0 (tetap)
-    gapToRank3: number; // Selisih poin ke peringkat 3 (jika rank > 3)
+    gapToAbove: number; // Selisih poin ke peringkat di atasnya (jika rank > 1)
+    gapToRank3?: number; // Selisih poin ke peringkat 3 (backward compatibility)
 }
 
 export interface LeaderboardResponse {

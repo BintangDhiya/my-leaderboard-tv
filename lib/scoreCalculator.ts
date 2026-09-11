@@ -149,6 +149,8 @@ export function generateLeaderboard(
         const previousRank = yesterdayRankMap.get(dev.nrp) || currentRank;
         const rankDelta = previousRank - currentRank;
         const onTimeRate = dev.closedTasks > 0 ? Math.round((dev.onTimeTasks / dev.closedTasks) * 100) : 0;
+        const prevDev = idx > 0 ? sortedCurrent[idx - 1] : null;
+        const gapToAbove = prevDev ? Math.max(0, prevDev.totalScore - dev.totalScore) : 0;
         const gapToRank3 = currentRank > 3 ? Math.max(0, rank3Score - dev.totalScore + 1) : 0;
 
         return {
@@ -163,6 +165,7 @@ export function generateLeaderboard(
             currentRank,
             previousRank,
             rankDelta,
+            gapToAbove,
             gapToRank3,
         };
     });

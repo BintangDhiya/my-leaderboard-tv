@@ -50,7 +50,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                             <th className="py-3 px-4 text-center">Score</th>
                             <th className="py-3 px-4 text-center">On-Time %</th>
                             <th className="py-3 px-4 text-center">Done / Late</th>
-                            <th className="py-3 px-4">Gap to Top 3</th>
+                            <th className="py-3 px-4">Gap to Rank Above</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-900">
@@ -108,15 +108,21 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                     <span className="text-rose-400">{dev.lateTasks}</span>
                                 </td>
 
-                                {/* Gap to Top 3 (Motivator Bar) */}
+                                {/* Gap to Rank Above (Motivator Bar) */}
                                 <td className="py-3 px-4">
-                                    <div className="flex items-center gap-2">
-                                        <Target className="w-4 h-4 text-amber-500/70 shrink-0" />
-                                        <span className="font-mono text-xs font-semibold text-neutral-300">
-                                            +{dev.gapToRank3} pts
-                                        </span>
-                                        <span className="text-[10px] text-neutral-500 hidden xl:inline">to enter Top 3</span>
-                                    </div>
+                                    {dev.currentRank > 1 ? (
+                                        <div className="flex items-center gap-2">
+                                            <Target className="w-4 h-4 text-amber-500/70 shrink-0" />
+                                            <span className="font-mono text-xs font-semibold text-neutral-300">
+                                                {dev.gapToAbove === 0 ? '0 pts' : `+${dev.gapToAbove} pts`}
+                                            </span>
+                                            <span className="text-[10px] text-neutral-500 hidden xl:inline">
+                                                {dev.gapToAbove === 0 ? `tied with #${dev.currentRank - 1}` : `to #${dev.currentRank - 1}`}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-neutral-500 font-mono">-</span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
