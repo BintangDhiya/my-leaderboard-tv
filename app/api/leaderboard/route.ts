@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
                     customStart: startDate,
                     customEnd: endDate,
                     excludedNames,
+                    onlyClosed: false, // Ambil semua status untuk status breakdown
                 });
             } catch (dbError) {
                 console.warn(

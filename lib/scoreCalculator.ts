@@ -33,6 +33,9 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
     onTimeTasks: number;
     lateTasks: number;
     totalScore: number;
+    newTasks: number;
+    inProgressTasks: number;
+    feedbackTasks: number;
 }> {
     const devMap = new Map();
 
@@ -45,11 +48,24 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
                 onTimeTasks: 0,
                 lateTasks: 0,
                 totalScore: 0,
+                newTasks: 0,
+                inProgressTasks: 0,
+                feedbackTasks: 0,
             });
         }
 
+        const dev = devMap.get(task.nrp);
+
+        // Hitung per status
+        if (task.status_id === 1) {
+            dev.newTasks += 1;
+        } else if (task.status_id === 2) {
+            dev.inProgressTasks += 1;
+        } else if (task.status_id === 4) {
+            dev.feedbackTasks += 1;
+        }
+
         if (task.status_id === 5) {
-            const dev = devMap.get(task.nrp);
             dev.closedTasks += 1;
 
             const closedDate = task.closed_on ? new Date(task.closed_on) : null;
@@ -90,6 +106,8 @@ export const DEFAULT_EXCLUDED_NAMES: string[] = [
     'MUHAMMAD FAUZAN ACYUTO',
     'MOHAMAD BAYU AFRIANSYAH',
     'DESTRY ZUMAR SASTIANI',
+    'M. PUTRA TAMA BAYU HARGIO',
+    'TITIN ERVINA SARI',
 ];
 
 export function generateLeaderboard(
@@ -171,6 +189,9 @@ export function generateLeaderboard(
             rankDelta,
             gapToAbove,
             gapToRank3,
+            newTasks: dev.newTasks,
+            inProgressTasks: dev.inProgressTasks,
+            feedbackTasks: dev.feedbackTasks,
         };
     });
 

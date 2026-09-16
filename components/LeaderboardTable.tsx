@@ -44,12 +44,16 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                 <table className="w-full text-left text-sm text-neutral-300">
                     <thead className="bg-neutral-900/90 text-[11px] uppercase font-bold tracking-wider text-neutral-400 border-b border-neutral-800">
                         <tr>
-                            <th className="py-3 px-4 w-16 text-center">Standing</th>
-                            <th className="py-3 px-3 w-16 text-center">Trend</th>
+                            <th className="py-3 px-4 text-center">Standing</th>
+                            <th className="py-3 px-3 text-center">Trend</th>
                             <th className="py-3 px-4">Developer</th>
                             <th className="py-3 px-4 text-center">Score</th>
                             <th className="py-3 px-4 text-center">On-Time %</th>
                             <th className="py-3 px-4 text-center">Done / Late</th>
+                            <th className="py-3 px-3 text-center" title="Closed">Closed</th>
+                            <th className="py-3 px-3 text-center" title="Feedback">Feedback</th>
+                            <th className="py-3 px-3 text-center" title="In Progress">In Prog.</th>
+                            <th className="py-3 px-3 text-center" title="New / Not Started">New</th>
                             <th className="py-3 px-4">Gap to Rank Above</th>
                         </tr>
                     </thead>
@@ -91,10 +95,10 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                 <td className="py-3 px-4 text-center">
                                     <span
                                         className={`font-mono font-bold ${dev.onTimeRate >= 80
-                                                ? 'text-emerald-400'
-                                                : dev.onTimeRate >= 60
-                                                    ? 'text-yellow-400'
-                                                    : 'text-rose-400'
+                                            ? 'text-emerald-400'
+                                            : dev.onTimeRate >= 60
+                                                ? 'text-yellow-400'
+                                                : 'text-rose-400'
                                             }`}
                                     >
                                         {dev.onTimeRate}%
@@ -106,6 +110,26 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                     <span className="text-neutral-200 font-bold">{dev.onTimeTasks}</span>
                                     <span className="text-neutral-500 mx-1">/</span>
                                     <span className="text-rose-400">{dev.lateTasks}</span>
+                                </td>
+
+                                {/* Closed — GREEN */}
+                                <td className="py-3 px-3 text-center font-mono text-xs">
+                                    <span className="font-bold text-emerald-400">{dev.closedTasks}</span>
+                                </td>
+
+                                {/* Feedback — YELLOW */}
+                                <td className="py-3 px-3 text-center font-mono text-xs">
+                                    <span className="font-bold text-yellow-400">{dev.feedbackTasks}</span>
+                                </td>
+
+                                {/* In Progress — ORANGE */}
+                                <td className="py-3 px-3 text-center font-mono text-xs">
+                                    <span className="font-bold text-orange-400">{dev.inProgressTasks}</span>
+                                </td>
+
+                                {/* New / Not Started — RED */}
+                                <td className="py-3 px-3 text-center font-mono text-xs">
+                                    <span className="font-bold text-red-400">{dev.newTasks}</span>
                                 </td>
 
                                 {/* Gap to Rank Above (Motivator Bar) */}

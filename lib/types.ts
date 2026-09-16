@@ -36,6 +36,10 @@ export interface DeveloperStats {
     rankDelta: number; // Positif (naik / hijau), Negatif (turun / merah), 0 (tetap)
     gapToAbove: number; // Selisih poin ke peringkat di atasnya (jika rank > 1)
     gapToRank3?: number; // Selisih poin ke peringkat 3 (backward compatibility)
+    // Status breakdown
+    newTasks: number;        // status_id = 1 (New / Not Started)
+    inProgressTasks: number; // status_id = 2 (In Progress)
+    feedbackTasks: number;   // status_id = 4 (Feedback)
 }
 
 export interface LeaderboardResponse {
