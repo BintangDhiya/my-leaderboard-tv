@@ -173,7 +173,7 @@ export const ScoringGuide: React.FC = () => {
               <div>
                 <span className="font-bold text-neutral-200 block mb-0.5">Kriteria Task Dihitung</span>
                 <p className="text-neutral-400 text-[11px] leading-relaxed">
-                  Hanya task berstatus <span className="text-yellow-400 font-semibold font-mono">Closed</span> dengan tanggal penyelesaian (<span className="text-neutral-300 font-mono">closed_on</span>) yang sah yang mendapatkan poin. Task yang masih in-progress tidak dihitung.
+                  Hanya task berstatus <span className="text-yellow-400 font-semibold font-mono">Closed</span> dengan tenggat waktu (<span className="text-neutral-300 font-mono">due_date</span>) pada periode aktif yang mendapatkan poin. Task yang masih in-progress tidak dihitung.
                 </p>
               </div>
             </div>

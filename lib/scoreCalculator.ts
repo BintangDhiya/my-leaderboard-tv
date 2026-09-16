@@ -48,15 +48,19 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
             });
         }
 
-        if (task.status_id === 5 && task.closed_on) {
+        if (task.status_id === 5) {
             const dev = devMap.get(task.nrp);
             dev.closedTasks += 1;
 
-            const closedDate = new Date(task.closed_on);
+            const closedDate = task.closed_on ? new Date(task.closed_on) : null;
             const isNullDueDate = !task.due_date || task.due_date.trim() === '';
             const dueDate = isNullDueDate ? null : new Date(task.due_date!);
 
-            const isOnTime = isNullDueDate || (dueDate ? closedDate <= dueDate : true);
+            // Bandingkan hanya bagian tanggal (tanpa jam) — closed di hari yang sama = on time
+            const closedDateOnly = closedDate ? new Date(closedDate.getFullYear(), closedDate.getMonth(), closedDate.getDate()) : null;
+            const dueDateOnly = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()) : null;
+
+            const isOnTime = isNullDueDate || (dueDateOnly && closedDateOnly ? closedDateOnly <= dueDateOnly : true);
 
             const priority = (task.priority_name in PRIORITY_WEIGHTS ? task.priority_name : 'Normal') as keyof typeof PRIORITY_WEIGHTS;
             const weight = PRIORITY_WEIGHTS[priority];
@@ -117,15 +121,15 @@ export function generateLeaderboard(
 
     const currentPeriodTasks = validTasks.filter((t) => {
         if (!filterStartDate || !filterEndDate) return true;
-        const taskDate = t.closed_on ? new Date(t.closed_on) : new Date(t.created_on);
+        const taskDate = t.due_date ? new Date(t.due_date) : (t.closed_on ? new Date(t.closed_on) : new Date(t.created_on));
         return taskDate >= filterStartDate && taskDate <= filterEndDate;
     });
 
     const yesterdayTasks = validTasks.filter((t) => {
-        if (!t.closed_on) return false;
-        const closedDate = new Date(t.closed_on);
-        const inFilterRange = (!filterStartDate || closedDate >= filterStartDate);
-        return inFilterRange && closedDate < startOfToday;
+        const taskDate = t.due_date ? new Date(t.due_date) : (t.closed_on ? new Date(t.closed_on) : null);
+        if (!taskDate) return false;
+        const inFilterRange = (!filterStartDate || taskDate >= filterStartDate);
+        return inFilterRange && taskDate < startOfToday;
     });
 
     const currentScoresMap = calculateDevScores(currentPeriodTasks);
@@ -179,16 +183,24 @@ export function generateLeaderboard(
     const averageOnTimeRate = totalClosed > 0 ? Math.round((totalOnTime / totalClosed) * 100) : 0;
 
     const latestActivity = currentPeriodTasks
-        .filter((t) => t.status_id === 5 && t.closed_on)
-        .sort((a, b) => new Date(b.closed_on!).getTime() - new Date(a.closed_on!).getTime())
+        .filter((t) => t.status_id === 5)
+        .sort((a, b) => {
+            const timeA = a.closed_on ? new Date(a.closed_on).getTime() : (a.due_date ? new Date(a.due_date).getTime() : 0);
+            const timeB = b.closed_on ? new Date(b.closed_on).getTime() : (b.due_date ? new Date(b.due_date).getTime() : 0);
+            return timeB - timeA;
+        })
         .slice(0, 5)
         .map((t) => {
+            const closedDate = t.closed_on ? new Date(t.closed_on) : null;
             const isNullDue = !t.due_date || t.due_date.trim() === '';
-            const onTime = isNullDue || (t.due_date ? new Date(t.closed_on!) <= new Date(t.due_date) : true);
+            // Bandingkan hanya bagian tanggal (tanpa jam) — closed di hari yang sama = on time
+            const closedDateOnly = closedDate ? new Date(closedDate.getFullYear(), closedDate.getMonth(), closedDate.getDate()) : null;
+            const dueOnly = t.due_date ? new Date(new Date(t.due_date).getFullYear(), new Date(t.due_date).getMonth(), new Date(t.due_date).getDate()) : null;
+            const onTime = isNullDue || (dueOnly && closedDateOnly ? closedDateOnly <= dueOnly : true);
             return {
                 developer: t.nama,
                 taskTitle: t.isu_subject,
-                closedAt: t.closed_on!,
+                closedAt: t.closed_on || t.due_date || '',
                 isOnTime: onTime,
             };
         });

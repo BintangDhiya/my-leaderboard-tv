@@ -70,7 +70,7 @@ export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<Ra
     // 1. Filter status_id = 5 (Closed tasks only)
     const onlyClosed = filterOptions?.onlyClosed !== false;
     if (onlyClosed) {
-        conditions.push('status_id = 5 AND closed_on IS NOT NULL');
+        conditions.push('status_id = 5');
     }
 
     // 2. Filter rentang tanggal (Date range)
@@ -88,11 +88,11 @@ export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<Ra
 
     if (startDate) {
         request.input('startDate', sql.DateTime2, startDate);
-        conditions.push('closed_on >= @startDate');
+        conditions.push('due_date >= @startDate');
     }
     if (endDate) {
         request.input('endDate', sql.DateTime2, endDate);
-        conditions.push('closed_on <= @endDate');
+        conditions.push('due_date <= @endDate');
     }
 
     // 3. Filter nama yang dikecualikan (Excluded names)
