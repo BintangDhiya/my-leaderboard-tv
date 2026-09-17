@@ -3,10 +3,18 @@ import path from 'path';
 import { parse } from 'csv-parse/sync';
 import { RawTask, DeveloperStats, LeaderboardResponse } from './types';
 
-const PRIORITY_WEIGHTS = {
-    High: { onTime: 15, late: 3 },
-    Normal: { onTime: 10, late: 2 },
-    Low: { onTime: 5, late: 1 },
+// Bobot dasar berdasarkan prioritas (kompleksitas)
+const PRIORITY_WEIGHTS: Record<string, number> = {
+    High: 10,
+    Normal: 5,
+    Low: 3,
+};
+
+// Multiplier berdasarkan ketepatan waktu
+const TIME_MULTIPLIERS = {
+    LEBIH_CEPAT: 1.2,
+    DONE: 1.0,
+    LATE: 0.7,
 };
 
 export function parseCSVData(): RawTask[] {
@@ -26,10 +34,40 @@ export function parseCSVData(): RawTask[] {
     });
 }
 
+/**
+ * Menentukan status ketepatan waktu untuk task yang Closed (5) atau Feedback (4)
+ */
+function getTaskTimeCategory(task: RawTask): 'LEBIH_CEPAT' | 'DONE' | 'LATE' {
+    const isNullDueDate = !task.due_date || task.due_date.trim() === '';
+    if (isNullDueDate) return 'DONE';
+
+    // Jika Feedback (4), gunakan updated_on. Jika Closed (5), gunakan closed_on.
+    const completionDateStr = task.status_id === 4 ? task.updated_on : task.closed_on;
+    if (!completionDateStr || completionDateStr.trim() === '') return 'DONE';
+
+    const completionDate = new Date(completionDateStr);
+    const dueDate = new Date(task.due_date!);
+
+    // Bandingkan hanya bagian tanggal (tanpa jam)
+    const compDateOnly = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+    const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+
+    if (compDateOnly < dueDateOnly) {
+        return 'LEBIH_CEPAT';
+    } else if (compDateOnly.getTime() === dueDateOnly.getTime()) {
+        return 'DONE';
+    } else {
+        return 'LATE';
+    }
+}
+
 function calculateDevScores(tasks: RawTask[]): Map<string, {
     name: string;
     nrp: string;
+    totalProcessed: number;
     closedTasks: number;
+    lebihCepatTasks: number;
+    doneTasks: number;
     onTimeTasks: number;
     lateTasks: number;
     totalScore: number;
@@ -44,7 +82,10 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
             devMap.set(task.nrp, {
                 name: task.nama,
                 nrp: task.nrp,
+                totalProcessed: 0,
                 closedTasks: 0,
+                lebihCepatTasks: 0,
+                doneTasks: 0,
                 onTimeTasks: 0,
                 lateTasks: 0,
                 totalScore: 0,
@@ -56,40 +97,45 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
 
         const dev = devMap.get(task.nrp);
 
-        // Hitung per status
+        // Track breakdown status
         if (task.status_id === 1) {
             dev.newTasks += 1;
         } else if (task.status_id === 2) {
             dev.inProgressTasks += 1;
         } else if (task.status_id === 4) {
             dev.feedbackTasks += 1;
+        } else if (task.status_id === 5) {
+            dev.closedTasks += 1;
         }
 
-        if (task.status_id === 5) {
-            dev.closedTasks += 1;
-
-            const closedDate = task.closed_on ? new Date(task.closed_on) : null;
-            const isNullDueDate = !task.due_date || task.due_date.trim() === '';
-            const dueDate = isNullDueDate ? null : new Date(task.due_date!);
-
-            // Bandingkan hanya bagian tanggal (tanpa jam) — closed di hari yang sama = on time
-            const closedDateOnly = closedDate ? new Date(closedDate.getFullYear(), closedDate.getMonth(), closedDate.getDate()) : null;
-            const dueDateOnly = dueDate ? new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()) : null;
-
-            const isOnTime = isNullDueDate || (dueDateOnly && closedDateOnly ? closedDateOnly <= dueDateOnly : true);
+        // Hitung Skor & Performance Waktu HANYA untuk Closed (5) dan Feedback (4)
+        if (task.status_id === 5 || task.status_id === 4) {
+            dev.totalProcessed += 1;
 
             const priority = (task.priority_name in PRIORITY_WEIGHTS ? task.priority_name : 'Normal') as keyof typeof PRIORITY_WEIGHTS;
-            const weight = PRIORITY_WEIGHTS[priority];
+            const basePoints = PRIORITY_WEIGHTS[priority] || 5;
 
-            if (isOnTime) {
+            const timeCategory = getTaskTimeCategory(task); // Menggunakan updated_on jika status 4, closed_on jika status 5
+            const multiplier = TIME_MULTIPLIERS[timeCategory];
+
+            // Tambahkan skor
+            dev.totalScore += basePoints * multiplier;
+
+            if (timeCategory === 'LEBIH_CEPAT') {
+                dev.lebihCepatTasks += 1;
                 dev.onTimeTasks += 1;
-                dev.totalScore += weight.onTime;
+            } else if (timeCategory === 'DONE') {
+                dev.doneTasks += 1;
+                dev.onTimeTasks += 1;
             } else {
                 dev.lateTasks += 1;
-                dev.totalScore += weight.late;
             }
         }
     }
+
+    devMap.forEach((dev) => {
+        dev.totalScore = Math.round(dev.totalScore * 10) / 10;
+    });
 
     return devMap;
 }
@@ -139,13 +185,15 @@ export function generateLeaderboard(
 
     const currentPeriodTasks = validTasks.filter((t) => {
         if (!filterStartDate || !filterEndDate) return true;
-        const taskDate = t.due_date ? new Date(t.due_date) : (t.closed_on ? new Date(t.closed_on) : new Date(t.created_on));
+        const taskDateStr = t.status_id === 4 ? (t.updated_on || t.due_date || t.created_on) : (t.closed_on || t.due_date || t.created_on);
+        const taskDate = new Date(taskDateStr);
         return taskDate >= filterStartDate && taskDate <= filterEndDate;
     });
 
     const yesterdayTasks = validTasks.filter((t) => {
-        const taskDate = t.due_date ? new Date(t.due_date) : (t.closed_on ? new Date(t.closed_on) : null);
-        if (!taskDate) return false;
+        const taskDateStr = t.status_id === 4 ? (t.updated_on || t.due_date) : (t.closed_on || t.due_date);
+        if (!taskDateStr) return false;
+        const taskDate = new Date(taskDateStr);
         const inFilterRange = (!filterStartDate || taskDate >= filterStartDate);
         return inFilterRange && taskDate < startOfToday;
     });
@@ -170,7 +218,8 @@ export function generateLeaderboard(
         const currentRank = idx + 1;
         const previousRank = yesterdayRankMap.get(dev.nrp) || currentRank;
         const rankDelta = previousRank - currentRank;
-        const onTimeRate = dev.closedTasks > 0 ? Math.round((dev.onTimeTasks / dev.closedTasks) * 100) : 0;
+        // Pembagi On-Time Rate menggunakan totalProcessed (Closed + Feedback)
+        const onTimeRate = dev.totalProcessed > 0 ? Math.round((dev.onTimeTasks / dev.totalProcessed) * 100) : 0;
         const prevDev = idx > 0 ? sortedCurrent[idx - 1] : null;
         const gapToAbove = prevDev ? Math.max(0, prevDev.totalScore - dev.totalScore) : 0;
         const gapToRank3 = currentRank > 3 ? Math.max(0, rank3Score - dev.totalScore + 1) : 0;
@@ -178,8 +227,10 @@ export function generateLeaderboard(
         return {
             nrp: dev.nrp,
             name: dev.name,
-            totalTasks: dev.closedTasks,
+            totalTasks: dev.totalProcessed,
             closedTasks: dev.closedTasks,
+            lebihCepatTasks: dev.lebihCepatTasks,
+            doneTasks: dev.doneTasks,
             onTimeTasks: dev.onTimeTasks,
             lateTasks: dev.lateTasks,
             onTimeRate,
@@ -204,25 +255,23 @@ export function generateLeaderboard(
     const averageOnTimeRate = totalClosed > 0 ? Math.round((totalOnTime / totalClosed) * 100) : 0;
 
     const latestActivity = currentPeriodTasks
-        .filter((t) => t.status_id === 5)
+        .filter((t) => t.status_id === 5 || t.status_id === 4)
         .sort((a, b) => {
-            const timeA = a.closed_on ? new Date(a.closed_on).getTime() : (a.due_date ? new Date(a.due_date).getTime() : 0);
-            const timeB = b.closed_on ? new Date(b.closed_on).getTime() : (b.due_date ? new Date(b.due_date).getTime() : 0);
+            const dateA = a.status_id === 4 ? (a.updated_on || a.due_date) : (a.closed_on || a.due_date);
+            const dateB = b.status_id === 4 ? (b.updated_on || b.due_date) : (b.closed_on || b.due_date);
+            const timeA = dateA ? new Date(dateA).getTime() : 0;
+            const timeB = dateB ? new Date(dateB).getTime() : 0;
             return timeB - timeA;
         })
         .slice(0, 5)
         .map((t) => {
-            const closedDate = t.closed_on ? new Date(t.closed_on) : null;
-            const isNullDue = !t.due_date || t.due_date.trim() === '';
-            // Bandingkan hanya bagian tanggal (tanpa jam) — closed di hari yang sama = on time
-            const closedDateOnly = closedDate ? new Date(closedDate.getFullYear(), closedDate.getMonth(), closedDate.getDate()) : null;
-            const dueOnly = t.due_date ? new Date(new Date(t.due_date).getFullYear(), new Date(t.due_date).getMonth(), new Date(t.due_date).getDate()) : null;
-            const onTime = isNullDue || (dueOnly && closedDateOnly ? closedDateOnly <= dueOnly : true);
+            const timeCat = getTaskTimeCategory(t);
+            const completedAt = t.status_id === 4 ? (t.updated_on || t.due_date || '') : (t.closed_on || t.due_date || '');
             return {
                 developer: t.nama,
                 taskTitle: t.isu_subject,
-                closedAt: t.closed_on || t.due_date || '',
-                isOnTime: onTime,
+                closedAt: completedAt,
+                isOnTime: timeCat === 'LEBIH_CEPAT' || timeCat === 'DONE',
             };
         });
 

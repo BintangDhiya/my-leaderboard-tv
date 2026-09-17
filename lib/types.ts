@@ -14,6 +14,7 @@ export interface RawTask {
     plan_date?: number;
     created_on: string;
     closed_on?: string;
+    updated_on?: string;
     actual_date?: number;
     status_id: number;
     status_desc: string;
@@ -27,10 +28,12 @@ export interface DeveloperStats {
     name: string;
     totalTasks: number;
     closedTasks: number;
-    onTimeTasks: number;
-    lateTasks: number;
-    onTimeRate: number; // Persentase 0 - 100
-    score: number; // Skor gamification berbobot
+    lebihCepatTasks: number; // Task selesai lebih cepat (Early)
+    doneTasks: number;        // Task selesai tepat waktu (Done)
+    onTimeTasks: number;      // Total On-Time (Early + Done)
+    lateTasks: number;        // Task terlambat (Late)
+    onTimeRate: number;       // Persentase 0 - 100
+    score: number;            // Total Skor berbobot
     currentRank: number;
     previousRank: number;
     rankDelta: number; // Positif (naik / hijau), Negatif (turun / merah), 0 (tetap)

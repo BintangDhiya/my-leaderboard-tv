@@ -50,7 +50,7 @@ export default function LeaderboardPage() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col justify-between selection:bg-yellow-500 selection:text-black">
-      <div className="max-w-[1700px] w-full mx-auto p-4 lg:p-8 space-y-6 flex-1">
+      <div className="w-full mx-auto py-4 lg:py-8 px-12 lg:px-16 space-y-6 flex-1">
         {/* 1. Header Bar */}
         <LeaderboardHeader
           data={data}

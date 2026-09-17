@@ -96,26 +96,34 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium }) => {
                 </div>
 
                 {/* Stats Grid Esports Bar */}
-                <div className="grid grid-cols-5 gap-2 pt-3 border-t border-neutral-800/80 text-center">
+                <div className="grid grid-cols-7 gap-1.5 pt-3 border-t border-neutral-800/80 text-center">
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
-                        <span className="text-base lg:text-lg font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
+                        <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">On-Time %</span>
-                        <span className="text-base lg:text-lg font-black text-emerald-400 font-mono">{dev.onTimeRate}%</span>
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">On-Time %</span>
+                        <span className="text-sm lg:text-base font-black text-emerald-400 font-mono">{dev.onTimeRate}%</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Closed</span>
-                        <span className="text-base lg:text-lg font-bold text-neutral-200 font-mono">{dev.closedTasks}</span>
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Closed</span>
+                        <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.closedTasks}</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">On Time</span>
-                        <span className="text-base lg:text-lg font-bold text-emerald-400 font-mono">{dev.onTimeTasks}</span>
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Feedback</span>
+                        <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.feedbackTasks}</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Late</span>
-                        <span className="text-base lg:text-lg font-bold text-rose-400 font-mono">{dev.lateTasks}</span>
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Early</span>
+                        <span className="text-sm lg:text-base font-bold text-emerald-400 font-mono">{dev.lebihCepatTasks || 0}</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Done</span>
+                        <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.doneTasks || 0}</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Late</span>
+                        <span className="text-sm lg:text-base font-bold text-rose-400 font-mono">{dev.lateTasks}</span>
                     </div>
                 </div>
             </div>

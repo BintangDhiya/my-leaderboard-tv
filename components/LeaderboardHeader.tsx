@@ -1,6 +1,7 @@
 import React from 'react';
 import { Flame, Clock, Radio } from 'lucide-react';
 import { LeaderboardResponse } from '@/lib/types';
+import Image from 'next/image';
 
 interface HeaderProps {
     data: LeaderboardResponse;
@@ -20,16 +21,22 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
             {/* Title & Live Badge */}
             <div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
-                        <Radio className="w-3.5 h-3.5" /> LIVE DISPLAY
-                    </div>
+                    <Image
+                        src="/images/logo-pama-dark-sm.png" // Points to root public/
+                        alt="Logo PAMA"
+                        width={50}
+                        height={50}
+                    />
                     <h1 className="text-2xl lg:text-3xl font-black uppercase tracking-wider bg-clip-text">
                         Performance Leaderboard
                     </h1>
                 </div>
-                <p className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
+                <div className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
                     <Clock className="w-3.5 h-3.5" /> Last Auto Sync: <span className="font-mono text-neutral-300">{lastUpdated}</span>
-                </p>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
+                        <Radio className="w-3.5 h-3.5" /> LIVE DISPLAY
+                    </div>
+                </div>
             </div>
 
             {/* Filter Tabs & Quick Team Stats */}

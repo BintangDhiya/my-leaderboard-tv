@@ -49,10 +49,11 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                             <th className="py-3 px-4">Developer</th>
                             <th className="py-3 px-4 text-center">Score</th>
                             <th className="py-3 px-4 text-center">On-Time %</th>
-                            <th className="py-3 px-4 text-center">Done / Late</th>
-                            <th className="py-3 px-3 text-center" title="Closed">Closed</th>
-                            <th className="py-3 px-3 text-center" title="Feedback">Feedback</th>
-                            <th className="py-3 px-3 text-center" title="In Progress">In Prog.</th>
+                            {/* Header Diubah Menjadi Early / Done / Late */}
+                            <th className="py-3 px-4 text-center" title="Early / Done / Late">Early / Done / Late</th>
+                            <th className="py-3 px-3 text-center" title="Closed Tasks">Closed</th>
+                            <th className="py-3 px-3 text-center" title="Feedback Tasks">Feedback</th>
+                            <th className="py-3 px-3 text-center" title="In Progress Tasks">In Prog.</th>
                             <th className="py-3 px-3 text-center" title="New / Not Started">New</th>
                             <th className="py-3 px-4">Gap to Rank Above</th>
                         </tr>
@@ -63,17 +64,12 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                 key={dev.nrp}
                                 className="hover:bg-neutral-800/40 transition-colors duration-150 group"
                             >
-                                {/* Standing */}
                                 <td className="py-3 px-4 text-center font-black font-mono text-neutral-400 group-hover:text-neutral-200">
                                     #{dev.currentRank}
                                 </td>
-
-                                {/* Trend Delta */}
                                 <td className="py-3 px-3 text-center">
                                     <div className="flex justify-center">{renderDelta(dev.rankDelta)}</div>
                                 </td>
-
-                                {/* Username / Avatar */}
                                 <td className="py-3 px-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-xs text-neutral-300">
@@ -85,13 +81,9 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                         </div>
                                     </div>
                                 </td>
-
-                                {/* Score */}
                                 <td className="py-3 px-4 text-center font-black font-mono text-amber-400 text-base">
                                     {dev.score.toLocaleString()}
                                 </td>
-
-                                {/* On-Time Rate */}
                                 <td className="py-3 px-4 text-center">
                                     <span
                                         className={`font-mono font-bold ${dev.onTimeRate >= 80
@@ -104,35 +96,26 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers }) =
                                         {dev.onTimeRate}%
                                     </span>
                                 </td>
-
-                                {/* Done vs Late */}
+                                {/* Format Tampilan: Early / Done / Late */}
                                 <td className="py-3 px-4 text-center font-mono text-xs">
-                                    <span className="text-neutral-200 font-bold">{dev.onTimeTasks}</span>
+                                    <span className="text-emerald-400 font-bold" title="Early (Lebih Cepat)">{dev.lebihCepatTasks || 0}</span>
                                     <span className="text-neutral-500 mx-1">/</span>
-                                    <span className="text-rose-400">{dev.lateTasks}</span>
+                                    <span className="text-sky-400 font-bold" title="Done (Tepat Waktu)">{dev.doneTasks || 0}</span>
+                                    <span className="text-neutral-500 mx-1">/</span>
+                                    <span className="text-rose-400 font-bold" title="Late (Terlambat)">{dev.lateTasks}</span>
                                 </td>
-
-                                {/* Closed — GREEN */}
                                 <td className="py-3 px-3 text-center font-mono text-xs">
                                     <span className="font-bold text-emerald-400">{dev.closedTasks}</span>
                                 </td>
-
-                                {/* Feedback — YELLOW */}
                                 <td className="py-3 px-3 text-center font-mono text-xs">
                                     <span className="font-bold text-yellow-400">{dev.feedbackTasks}</span>
                                 </td>
-
-                                {/* In Progress — ORANGE */}
                                 <td className="py-3 px-3 text-center font-mono text-xs">
                                     <span className="font-bold text-orange-400">{dev.inProgressTasks}</span>
                                 </td>
-
-                                {/* New / Not Started — RED */}
                                 <td className="py-3 px-3 text-center font-mono text-xs">
                                     <span className="font-bold text-red-400">{dev.newTasks}</span>
                                 </td>
-
-                                {/* Gap to Rank Above (Motivator Bar) */}
                                 <td className="py-3 px-4">
                                     {dev.currentRank > 1 ? (
                                         <div className="flex items-center gap-2">
