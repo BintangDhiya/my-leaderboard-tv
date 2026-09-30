@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse/sync';
-import { RawTask, DeveloperStats, LeaderboardResponse } from './types';
+import { RawTask, DeveloperStats, LeaderboardResponse, AttendanceSummary } from './types';
 
 // Bobot dasar berdasarkan prioritas (kompleksitas)
 const PRIORITY_WEIGHTS: Record<string, number> = {
@@ -61,6 +61,29 @@ function getTaskTimeCategory(task: RawTask): 'LEBIH_CEPAT' | 'DONE' | 'LATE' {
     }
 }
 
+// Canonical NRP mapping - attendance DB NRP is the source of truth.
+// If Redmine/other systems use a different NRP, alias it to the attendance DB value.
+const NRP_ALIASES: Record<string, string> = {
+    'JIMM21005': 'JIMM21009', // Rafi Fauzan: normalize any old alias to attendance DB NRP
+    'JI260074': 'JI260374',  // Bintang Dhiya: normalize any old alias to attendance DB NRP
+};
+
+// Canonical Name mapping for name variations:
+const NAME_ALIASES: Record<string, string> = {
+    'MUHAMMAD TAUFIQ AZRA HAROMAIN': 'M. TAUFIQ AZRA HAROMAIN',
+    'RAFI FAUZAN': 'RAFI FAUZAN NUGROHO',
+};
+
+export function getCanonicalNrp(nrp: string): string {
+    const clean = (nrp || '').trim().toUpperCase();
+    return NRP_ALIASES[clean] || clean;
+}
+
+export function getCanonicalName(name: string): string {
+    const clean = (name || '').trim().toUpperCase();
+    return NAME_ALIASES[clean] || clean;
+}
+
 function calculateDevScores(tasks: RawTask[]): Map<string, {
     name: string;
     nrp: string;
@@ -78,10 +101,13 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
     const devMap = new Map();
 
     for (const task of tasks) {
-        if (!devMap.has(task.nrp)) {
-            devMap.set(task.nrp, {
-                name: task.nama,
-                nrp: task.nrp,
+        const cNrp = getCanonicalNrp(task.nrp);
+        const cName = getCanonicalName(task.nama);
+
+        if (!devMap.has(cNrp)) {
+            devMap.set(cNrp, {
+                name: cName,
+                nrp: cNrp,
                 totalProcessed: 0,
                 closedTasks: 0,
                 lebihCepatTasks: 0,
@@ -95,7 +121,7 @@ function calculateDevScores(tasks: RawTask[]): Map<string, {
             });
         }
 
-        const dev = devMap.get(task.nrp);
+        const dev = devMap.get(cNrp);
 
         // Track breakdown status
         if (task.status_id === 1) {
@@ -158,18 +184,22 @@ export const DEFAULT_EXCLUDED_NAMES: string[] = [
 
 export function generateLeaderboard(
     allTasks: RawTask[],
+    attendanceData: AttendanceSummary[] = [],
     filterType: 'all' | 'this_month' | 'custom' = 'this_month',
+    mode: 'task' | 'attendance' | 'both' = 'both',
     customStart?: string,
     customEnd?: string,
     excludedNames: string[] = DEFAULT_EXCLUDED_NAMES
 ): LeaderboardResponse {
-    const excludedSet = new Set(excludedNames.map((name) => name.trim().toUpperCase()));
-    const validTasks = excludedSet.size > 0
-        ? allTasks.filter((t) => !excludedSet.has((t.nama || '').trim().toUpperCase()))
-        : allTasks;
 
+    // --- BOBOT KOMBINASI SKOR (BISA DIUBAH DI SINI) ---
+    const TASK_WEIGHT = 0.5; // 50%
+    const ATTENDANCE_WEIGHT = 0.5; // 50%
+
+    // 1. Filter Tasks & Kalkulasi Skor Task
+    const excludedSet = new Set(excludedNames.map((n) => n.trim().toUpperCase()));
+    const validTasks = allTasks.filter((t) => !excludedSet.has((t.nama || '').trim().toUpperCase()));
     const now = new Date();
-
     let filterStartDate: Date | null = null;
     let filterEndDate: Date | null = null;
 
@@ -181,8 +211,6 @@ export function generateLeaderboard(
         filterEndDate = new Date(customEnd);
     }
 
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
     const currentPeriodTasks = validTasks.filter((t) => {
         if (!filterStartDate || !filterEndDate) return true;
         const taskDateStr = t.status_id === 4 ? (t.updated_on || t.due_date || t.created_on) : (t.closed_on || t.due_date || t.created_on);
@@ -190,61 +218,146 @@ export function generateLeaderboard(
         return taskDate >= filterStartDate && taskDate <= filterEndDate;
     });
 
+    const currentScoresMap = calculateDevScores(currentPeriodTasks);
+
+    // 2. Map Attendance Data agar mudah dicari berdasarkan Canonical NRP
+    const attByNrp = new Map<string, AttendanceSummary>();
+    attendanceData.forEach(att => {
+        const cNrp = getCanonicalNrp(att.nrp);
+        attByNrp.set(cNrp, att);
+    });
+
+    // 3. Gabungkan Semua Developer secara unik berdasarkan Canonical NRP
+    const unifiedDevs = new Map<string, { nrp: string, name: string }>();
+    currentScoresMap.forEach((dev) => {
+        const cNrp = getCanonicalNrp(dev.nrp);
+        const cName = getCanonicalName(dev.name);
+        unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
+    });
+    attendanceData.forEach(att => {
+        const cNrp = getCanonicalNrp(att.nrp);
+        const cName = getCanonicalName(att.namaKaryawan);
+        if (!unifiedDevs.has(cNrp)) {
+            unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
+        }
+    });
+
+    // 4. Susun Data Mentah ke Array
+    let leaderboardRaw: DeveloperStats[] = [];
+
+    unifiedDevs.forEach((baseDev, cNrp) => {
+        const normName = getCanonicalName(baseDev.name);
+        // Abaikan jika masuk daftar exclude
+        if (excludedSet.has(normName) || excludedSet.has(baseDev.name.toUpperCase())) return;
+
+        const devTask = currentScoresMap.get(cNrp) || {
+            totalProcessed: 0, closedTasks: 0, lebihCepatTasks: 0, doneTasks: 0,
+            onTimeTasks: 0, lateTasks: 0, totalScore: 0, newTasks: 0, inProgressTasks: 0, feedbackTasks: 0
+        };
+        const devAtt = attByNrp.get(cNrp);
+
+        const tScore = devTask.totalScore || 0;
+        const aScore = devAtt ? devAtt.skorAkhir : 0;
+
+        // Tentukan skor murni sesuai mode yang dipilih
+        let finalScore = 0;
+        if (mode === 'task') {
+            finalScore = tScore;
+        } else if (mode === 'attendance') {
+            finalScore = aScore; // Murni mengambil Skor Akhir dari Metabase SQL
+        } else {
+            finalScore = (tScore * TASK_WEIGHT) + (aScore * ATTENDANCE_WEIGHT);
+        }
+
+        const onTimeRate = devTask.totalProcessed > 0 ? Math.round((devTask.onTimeTasks / devTask.totalProcessed) * 100) : 0;
+
+        leaderboardRaw.push({
+            nrp: cNrp,
+            name: baseDev.name,
+            totalTasks: devTask.totalProcessed,
+            closedTasks: devTask.closedTasks,
+            lebihCepatTasks: devTask.lebihCepatTasks,
+            doneTasks: devTask.doneTasks,
+            onTimeTasks: devTask.onTimeTasks,
+            lateTasks: devTask.lateTasks,
+            onTimeRate,
+
+            // Attendance Properties
+            totalHadir: devAtt ? devAtt.totalKehadiran : 0,
+            totalDinas: devAtt ? devAtt.totalHariDinas : 0,
+            totalTelat: devAtt ? devAtt.totalTerlambat : 0,
+            totalTidakMasuk: devAtt ? devAtt.totalTidakMasuk : 0,
+            totalLupaTap: devAtt ? (devAtt.totalLupaTapMasuk + devAtt.totalLupaTapPulang) : 0,
+            persentaseTerlambat: devAtt ? devAtt.persentaseTerlambat : '0%',
+            persentaseTidakTerlambat: devAtt ? devAtt.persentaseTidakTerlambat : '0%',
+            keteranganDinas: devAtt ? devAtt.keteranganDinas : '-',
+
+            // Score Breakdowns
+            taskScore: tScore,
+            attendanceScore: aScore,
+            score: Math.round(finalScore * 10) / 10,
+
+            // Placeholders
+            currentRank: 0, previousRank: 0, rankDelta: 0, gapToAbove: 0, gapToRank3: 0,
+            newTasks: devTask.newTasks, inProgressTasks: devTask.inProgressTasks, feedbackTasks: devTask.feedbackTasks,
+        });
+    });
+
+    // 5. SORTING UTAMA BERDASARKAN MODE SKOR
+    leaderboardRaw.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (mode === 'attendance') {
+            return b.totalHadir - a.totalHadir;
+        }
+        if (b.onTimeRate !== a.onTimeRate) return b.onTimeRate - a.onTimeRate;
+        return b.totalTasks - a.totalTasks;
+    });
+
+    // (Pendukung) Hitung rank kemarin berdasar tasks saja untuk fallback Tren Rank
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterdayTasks = validTasks.filter((t) => {
         const taskDateStr = t.status_id === 4 ? (t.updated_on || t.due_date) : (t.closed_on || t.due_date);
         if (!taskDateStr) return false;
         const taskDate = new Date(taskDateStr);
-        const inFilterRange = (!filterStartDate || taskDate >= filterStartDate);
-        return inFilterRange && taskDate < startOfToday;
+        return (!filterStartDate || taskDate >= filterStartDate) && taskDate < startOfToday;
     });
-
-    const currentScoresMap = calculateDevScores(currentPeriodTasks);
-    const sortedCurrent = Array.from(currentScoresMap.values()).sort((a, b) => {
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        const rateA = a.closedTasks ? (a.onTimeTasks / a.closedTasks) : 0;
-        const rateB = b.closedTasks ? (b.onTimeTasks / b.closedTasks) : 0;
-        if (rateB !== rateA) return rateB - rateA;
-        return b.closedTasks - a.closedTasks;
-    });
-
     const yesterdayScoresMap = calculateDevScores(yesterdayTasks);
     const sortedYesterday = Array.from(yesterdayScoresMap.values()).sort((a, b) => b.totalScore - a.totalScore);
     const yesterdayRankMap = new Map<string, number>();
     sortedYesterday.forEach((dev, idx) => yesterdayRankMap.set(dev.nrp, idx + 1));
 
-    const rank3Score = sortedCurrent[2]?.totalScore || 0;
+    // 6. Finishing (Hitung Gap & Rank Delta dengan standar SQL RANK)
+    const rank3Score = leaderboardRaw[2]?.score || 0;
 
-    const leaderboard: DeveloperStats[] = sortedCurrent.map((dev, idx) => {
-        const currentRank = idx + 1;
-        const previousRank = yesterdayRankMap.get(dev.nrp) || currentRank;
+    const leaderboard: DeveloperStats[] = [];
+    let currentRank = 1;
+
+    for (let idx = 0; idx < leaderboardRaw.length; idx++) {
+        const dev = leaderboardRaw[idx];
+        const prevDev = idx > 0 ? leaderboardRaw[idx - 1] : null;
+
+        if (prevDev && dev.score === prevDev.score) {
+            currentRank = leaderboard[idx - 1].currentRank;
+        } else {
+            currentRank = idx + 1;
+        }
+
+        const defaultPrevRank = sortedYesterday.length > 0 ? sortedYesterday.length + 1 : currentRank;
+        const previousRank = yesterdayRankMap.get(dev.nrp) ?? defaultPrevRank;
         const rankDelta = previousRank - currentRank;
-        // Pembagi On-Time Rate menggunakan totalProcessed (Closed + Feedback)
-        const onTimeRate = dev.totalProcessed > 0 ? Math.round((dev.onTimeTasks / dev.totalProcessed) * 100) : 0;
-        const prevDev = idx > 0 ? sortedCurrent[idx - 1] : null;
-        const gapToAbove = prevDev ? Math.max(0, prevDev.totalScore - dev.totalScore) : 0;
-        const gapToRank3 = currentRank > 3 ? Math.max(0, rank3Score - dev.totalScore + 1) : 0;
 
-        return {
-            nrp: dev.nrp,
-            name: dev.name,
-            totalTasks: dev.totalProcessed,
-            closedTasks: dev.closedTasks,
-            lebihCepatTasks: dev.lebihCepatTasks,
-            doneTasks: dev.doneTasks,
-            onTimeTasks: dev.onTimeTasks,
-            lateTasks: dev.lateTasks,
-            onTimeRate,
-            score: dev.totalScore,
+        const gapToAbove = prevDev ? Math.max(0, prevDev.score - dev.score) : 0;
+        const gapToRank3 = currentRank > 3 ? Math.max(0, rank3Score - dev.score + 1) : 0;
+
+        leaderboard.push({
+            ...dev,
             currentRank,
             previousRank,
             rankDelta,
-            gapToAbove,
-            gapToRank3,
-            newTasks: dev.newTasks,
-            inProgressTasks: dev.inProgressTasks,
-            feedbackTasks: dev.feedbackTasks,
-        };
-    });
+            gapToAbove: Math.round(gapToAbove * 10) / 10,
+            gapToRank3: Math.round(gapToRank3 * 10) / 10,
+        });
+    }
 
     const risingStarCandidate = [...leaderboard]
         .filter((d) => d.rankDelta > 0)
@@ -279,11 +392,7 @@ export function generateLeaderboard(
         leaderboard,
         podium: leaderboard.slice(0, 3),
         risingStar: risingStarCandidate,
-        teamSummary: {
-            totalClosedTasks: totalClosed,
-            averageOnTimeRate,
-            activeDevelopers: leaderboard.length,
-        },
+        teamSummary: { totalClosedTasks: totalClosed, averageOnTimeRate, activeDevelopers: leaderboard.length },
         latestActivity,
     };
 }

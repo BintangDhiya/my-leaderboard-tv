@@ -1,7 +1,12 @@
 import sql from 'mssql';
-import { RawTask } from './types';
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'csv-parse/sync';
+import { RawTask, AttendanceSummary } from './types';
 
-// Global cached connection pool for Next.js hot-reloading
+// =========================================================
+// TASK DB CONNECTION
+// =========================================================
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 export function getDbConfig(): sql.config {
@@ -13,7 +18,7 @@ export function getDbConfig(): sql.config {
         database: process.env.DB_NAME || '',
         options: {
             encrypt: process.env.DB_ENCRYPT === 'true',
-            trustServerCertificate: process.env.DB_TRUST_SERVER_CERT !== 'false', // Default true for internal MSSQL
+            trustServerCertificate: process.env.DB_TRUST_SERVER_CERT !== 'false',
             connectTimeout: 8000,
             requestTimeout: 20000,
         },
@@ -27,16 +32,14 @@ export function getDbConfig(): sql.config {
 
 export async function getDbPool(): Promise<sql.ConnectionPool> {
     const config = getDbConfig();
-
     if (!config.server || !config.database) {
         throw new Error('Database server or database name is not configured in environment variables');
     }
-
     if (!poolPromise) {
         poolPromise = new sql.ConnectionPool(config)
             .connect()
             .then((pool) => {
-                console.log(`[MSSQL] Successfully connected to ${config.server}:${config.port}/${config.database}`);
+                console.log(`[MSSQL] Successfully connected to Task DB at ${config.server}:${config.port}/${config.database}`);
                 return pool;
             })
             .catch((err) => {
@@ -44,8 +47,53 @@ export async function getDbPool(): Promise<sql.ConnectionPool> {
                 throw err;
             });
     }
-
     return poolPromise;
+}
+
+// =========================================================
+// ATTENDANCE DB CONNECTION (jiepsqco423)
+// =========================================================
+let attPoolPromise: Promise<sql.ConnectionPool> | null = null;
+
+export function getAttDbConfig(): sql.config {
+    return {
+        user: process.env.ATT_DB_USER || '',
+        password: process.env.ATT_DB_PASSWORD || '',
+        server: process.env.ATT_DB_SERVER || '',
+        port: process.env.ATT_DB_PORT ? parseInt(process.env.ATT_DB_PORT, 10) : 1433,
+        database: process.env.ATT_DB_NAME || '',
+        options: {
+            encrypt: process.env.ATT_DB_ENCRYPT === 'true',
+            trustServerCertificate: process.env.ATT_DB_TRUST_SERVER_CERT !== 'false',
+            connectTimeout: 8000,
+            requestTimeout: 20000,
+        },
+        pool: {
+            max: 10,
+            min: 0,
+            idleTimeoutMillis: 30000,
+        },
+    };
+}
+
+export async function getAttDbPool(): Promise<sql.ConnectionPool> {
+    const config = getAttDbConfig();
+    if (!config.server || !config.database) {
+        throw new Error('Attendance DB server or database name is not configured in environment variables');
+    }
+    if (!attPoolPromise) {
+        attPoolPromise = new sql.ConnectionPool(config)
+            .connect()
+            .then((pool) => {
+                console.log(`[MSSQL] Successfully connected to Attendance DB at ${config.server}:${config.port}/${config.database}`);
+                return pool;
+            })
+            .catch((err) => {
+                attPoolPromise = null;
+                throw err;
+            });
+    }
+    return attPoolPromise;
 }
 
 export interface GetTasksFilter {
@@ -53,49 +101,40 @@ export interface GetTasksFilter {
     customStart?: string;
     customEnd?: string;
     excludedNames?: string[];
-    onlyClosed?: boolean; // Default: true (status_id = 5)
+    onlyClosed?: boolean;
 }
 
-/**
- * Fetch tasks from Microsoft SQL Server with parameterized WHERE clause filters.
- * Uses placeholder table name configurable via DB_TABLE (default: 'tasks').
- */
+// =========================================================
+// GET TASKS FROM REDMINE DB
+// =========================================================
 export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<RawTask[]> {
     const pool = await getDbPool();
     const tableName = process.env.DB_TABLE || 'tasks';
-
     const request = pool.request();
     const conditions: string[] = [];
 
-    // 1. Filter status_id = 5 (Closed tasks only)
     const onlyClosed = filterOptions?.onlyClosed !== false;
-    if (onlyClosed) {
-        conditions.push('status_id = 5');
-    }
+    if (onlyClosed) conditions.push('status_id = 5');
 
-    // 2. Filter rentang tanggal (Date range)
     const now = new Date();
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
 
     if (filterOptions?.filterType === 'this_month') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01 00:00:00`;
+        const endStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')} 23:59:59`;
+        request.input('startDate', sql.VarChar, startStr);
+        request.input('endDate', sql.VarChar, endStr);
+        conditions.push('due_date >= CAST(@startDate AS DATETIME2)');
+        conditions.push('due_date <= CAST(@endDate AS DATETIME2)');
     } else if (filterOptions?.filterType === 'custom' && filterOptions.customStart && filterOptions.customEnd) {
-        startDate = new Date(filterOptions.customStart);
-        endDate = new Date(filterOptions.customEnd);
+        request.input('startDate', sql.VarChar, filterOptions.customStart);
+        request.input('endDate', sql.VarChar, filterOptions.customEnd);
+        conditions.push('due_date >= CAST(@startDate AS DATETIME2)');
+        conditions.push('due_date <= CAST(@endDate AS DATETIME2)');
     }
 
-    if (startDate) {
-        request.input('startDate', sql.DateTime2, startDate);
-        conditions.push('due_date >= @startDate');
-    }
-    if (endDate) {
-        request.input('endDate', sql.DateTime2, endDate);
-        conditions.push('due_date <= @endDate');
-    }
-
-    // 3. Filter nama yang dikecualikan (Excluded names)
     if (filterOptions?.excludedNames && filterOptions.excludedNames.length > 0) {
         const nameParams = filterOptions.excludedNames.map((name, i) => {
             const paramName = `excName${i}`;
@@ -107,29 +146,15 @@ export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<Ra
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Query columns matching the RawTask interface
     const query = `
         SELECT 
-            ISNULL(login, '') AS login,
-            ISNULL(nrp, '') AS nrp,
-            ISNULL(nama, '') AS nama,
-            ISNULL(project_id, 0) AS project_id,
-            ISNULL(project_name, '') AS project_name,
-            ISNULL(tracker_id, 0) AS tracker_id,
-            ISNULL(tracker_name, '') AS tracker_name,
-            ISNULL(CAST(isu_id AS VARCHAR(50)), '') AS isu_id,
-            ISNULL(isu_subject, '') AS isu_subject,
-            description,
-            start_date,
-            due_date,
-            plan_date,
-            created_on,
-            closed_on,
-            actual_date,
-            ISNULL(status_id, 0) AS status_id,
-            ISNULL(status_desc, '') AS status_desc,
-            ISNULL(priority_id, 0) AS priority_id,
-            ISNULL(priority_name, 'Normal') AS priority_name,
+            ISNULL(login, '') AS login, ISNULL(nrp, '') AS nrp, ISNULL(nama, '') AS nama,
+            ISNULL(project_id, 0) AS project_id, ISNULL(project_name, '') AS project_name,
+            ISNULL(tracker_id, 0) AS tracker_id, ISNULL(tracker_name, '') AS tracker_name,
+            ISNULL(CAST(isu_id AS VARCHAR(50)), '') AS isu_id, ISNULL(isu_subject, '') AS isu_subject,
+            description, start_date, due_date, plan_date, created_on, closed_on, actual_date,
+            ISNULL(status_id, 0) AS status_id, ISNULL(status_desc, '') AS status_desc,
+            ISNULL(priority_id, 0) AS priority_id, ISNULL(priority_name, 'Normal') AS priority_name,
             ISNULL(done_ratio, 0) AS done_ratio
         FROM ${tableName}
         ${whereClause}
@@ -143,29 +168,260 @@ export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<Ra
             if (val instanceof Date) return val.toISOString();
             return String(val);
         };
-
         return {
-            login: String(row.login || ''),
-            nrp: String(row.nrp || ''),
-            nama: String(row.nama || ''),
-            project_id: Number(row.project_id) || 0,
-            project_name: String(row.project_name || ''),
-            tracker_id: Number(row.tracker_id) || 0,
-            tracker_name: String(row.tracker_name || ''),
-            isu_id: String(row.isu_id || ''),
-            isu_subject: String(row.isu_subject || ''),
+            login: String(row.login || ''), nrp: String(row.nrp || ''), nama: String(row.nama || ''),
+            project_id: Number(row.project_id) || 0, project_name: String(row.project_name || ''),
+            tracker_id: Number(row.tracker_id) || 0, tracker_name: String(row.tracker_name || ''),
+            isu_id: String(row.isu_id || ''), isu_subject: String(row.isu_subject || ''),
             description: row.description ? String(row.description) : undefined,
-            start_date: formatDate(row.start_date) || '',
-            due_date: formatDate(row.due_date),
+            start_date: formatDate(row.start_date) || '', due_date: formatDate(row.due_date),
             plan_date: row.plan_date !== null && row.plan_date !== undefined ? Number(row.plan_date) : undefined,
-            created_on: formatDate(row.created_on) || new Date().toISOString(),
-            closed_on: formatDate(row.closed_on),
+            created_on: formatDate(row.created_on) || new Date().toISOString(), closed_on: formatDate(row.closed_on),
             actual_date: row.actual_date !== null && row.actual_date !== undefined ? Number(row.actual_date) : undefined,
-            status_id: Number(row.status_id) || 0,
-            status_desc: String(row.status_desc || ''),
-            priority_id: Number(row.priority_id) || 0,
-            priority_name: String(row.priority_name || 'Normal'),
+            status_id: Number(row.status_id) || 0, status_desc: String(row.status_desc || ''),
+            priority_id: Number(row.priority_id) || 0, priority_name: String(row.priority_name || 'Normal'),
             done_ratio: Number(row.done_ratio) || 0,
         };
     });
+}
+
+// =========================================================
+// CSV PARSER HELPERS FOR ATTENDANCE
+// =========================================================
+function getHolidayValuesSQL(): string {
+    try {
+        const filePath = path.join(process.cwd(), 'data', 'holiday2026.csv');
+        if (!fs.existsSync(filePath)) return "('1900-01-01', 'DUMMY')";
+        const records = parse(fs.readFileSync(filePath, 'utf-8'), { columns: true, skip_empty_lines: true });
+        if (records.length === 0) return "('1900-01-01', 'DUMMY')";
+        return records.map((r: any) => `('${r.holiday_date}', '${r.holiday_name.replace(/'/g, "''")}')`).join(',\n');
+    } catch (e) {
+        return "('1900-01-01', 'DUMMY')";
+    }
+}
+
+function getDinasValuesSQL(): string {
+    try {
+        const filePath = path.join(process.cwd(), 'data', 'master-list-dinas.csv');
+        if (!fs.existsSync(filePath)) return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+        const records = parse(fs.readFileSync(filePath, 'utf-8'), { columns: true, skip_empty_lines: true });
+        if (records.length === 0) return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+        return records.map((r: any) => `('${r.tanggal}', '${r.nrp}', '${r.nama.replace(/'/g, "''")}', '${r.keperluan.replace(/'/g, "''")}')`).join(',\n');
+    } catch (e) {
+        return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+    }
+}
+
+// =========================================================
+// GET ATTENDANCE SUMMARY FROM DB_ATTENDANCE
+// =========================================================
+export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promise<AttendanceSummary[]> {
+    const pool = await getAttDbPool();
+    const request = pool.request();
+
+    // Default Date Range menggunakan local time format YYYY-MM-DD
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+
+    let startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    let endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
+    if (filterOptions?.filterType === 'custom' && filterOptions.customStart && filterOptions.customEnd) {
+        startDateStr = filterOptions.customStart.slice(0, 10);
+        endDateStr = filterOptions.customEnd.slice(0, 10);
+    } else if (filterOptions?.filterType === 'all') {
+        startDateStr = '2024-01-01';
+        endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    // Bind parameters as VarChar to prevent UTC offset shifts
+    request.input('startDate', sql.VarChar(10), startDateStr);
+    request.input('endDate', sql.VarChar(10), endDateStr);
+
+    // Get CSV Data as VALUES snippet
+    const holidayValues = getHolidayValuesSQL();
+    const dinasValues = getDinasValuesSQL();
+
+    const query = `
+        WITH 
+        weight_config AS (
+            SELECT 
+                10.0 AS w_kehadiran,       
+                0.2  AS w_persen_hadir,    
+                5.0  AS w_terlambat,       
+                15.0 AS w_tidak_masuk,     
+                2.0  AS w_lupa_masuk,      
+                2.0  AS w_lupa_pulang      
+        ),
+        oc_dinas AS (
+            SELECT CAST(tanggal AS DATE) AS dinas_tanggal, nrp, nama AS dinas_nama, keperluan
+            FROM (VALUES 
+                ${dinasValues}
+            ) AS d(tanggal, nrp, nama, keperluan)
+            WHERE nrp != 'DUMMY'
+        ),
+        calendar AS (
+            SELECT CAST(@startDate AS DATE) AS tgl
+            UNION ALL
+            SELECT DATEADD(DAY, 1, tgl)
+            FROM calendar
+            WHERE tgl < CAST(@endDate AS DATE) AND tgl < CAST(GETDATE() AS DATE)
+        ),
+        holiday_list AS (
+            SELECT CAST(tanggal AS DATE) AS tanggal, UPPER(keterangan) AS keterangan
+            FROM (VALUES 
+                ${holidayValues}
+            ) AS h(tanggal, keterangan)
+            WHERE keterangan != 'DUMMY'
+        ),
+        employee_list AS (
+            SELECT nrp, company, name 
+            FROM (
+                VALUES 
+                ('JI260011',  'MTG', 'AHMAD ANWAR HIDAYAT'),
+                ('JICE25003', 'MTG', 'RANDY AFIF HERLAMBANG'),
+                ('JICE25004', 'MTG', 'FARHAN DWICAHYO'),
+                ('JICE25007', 'MTG', 'HANUNG RIZQI WIDIANTO'),
+                ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'),
+                ('JIMT22012', 'MTG', 'OVIANTO'),
+                ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'),
+                ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
+                ('JIMT25004', 'MTG', 'ARIS PURNOMO'),
+                ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
+                ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM')
+            ) AS t(nrp, company, name)
+        ),
+        base_data AS (
+            SELECT c.tgl, e.nrp, e.company, e.name
+            FROM calendar c
+            CROSS JOIN employee_list e
+        ),
+        data_raw AS (
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily_history]
+            WHERE attendance_date BETWEEN CAST(@startDate AS DATE) AND CAST(@endDate AS DATE)
+            UNION ALL
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily]
+            WHERE attendance_date BETWEEN CAST(@startDate AS DATE) AND CAST(@endDate AS DATE)
+        ),
+        attendance_calc AS (
+            SELECT nrp, attendance_date, MIN(CASE WHEN trans = 'IN' THEN att_time END) AS raw_in, MAX(CASE WHEN trans = 'OUT' THEN att_time END) AS raw_out
+            FROM data_raw
+            GROUP BY nrp, attendance_date
+        ),
+        daily_status AS (
+            SELECT
+                b.nrp, b.name, b.company, b.tgl AS attendance_date,
+                FORMAT(b.tgl, 'MMMM', 'id-ID') AS bulan, MONTH(b.tgl) AS month_num,
+                a.raw_in, a.raw_out, d.keperluan AS dinas_keperluan,
+                CASE 
+                    WHEN h.tanggal IS NOT NULL THEN 1
+                    WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1
+                    ELSE 0
+                END AS is_holiday
+            FROM base_data b
+            LEFT JOIN attendance_calc a ON b.tgl = a.attendance_date AND b.nrp = a.nrp
+            LEFT JOIN holiday_list h ON b.tgl = h.tanggal
+            LEFT JOIN oc_dinas d ON b.tgl = d.dinas_tanggal AND b.nrp = d.nrp
+        ),
+        final_status AS (
+            SELECT *,
+                CASE
+                    WHEN raw_in IS NULL AND raw_out IS NULL AND dinas_keperluan IS NOT NULL THEN 'DINAS'
+                    WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 0 THEN 'TIDAK MASUK'
+                    WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 1 THEN 'LIBUR'
+                    WHEN raw_in IS NOT NULL AND raw_out IS NULL THEN 'LUPA TAP PULANG'
+                    WHEN raw_in IS NULL AND raw_out IS NOT NULL THEN 'LUPA TAP MASUK'
+                    WHEN raw_in > '07:30:00' THEN 'TERLAMBAT'
+                    ELSE 'TEPAT WAKTU'
+                END AS status_detail,
+                CASE WHEN raw_in > '07:30:00' THEN 1 ELSE 0 END AS status_telat
+            FROM daily_status
+        ),
+        aggregated_data AS (
+            SELECT
+                company, nrp, name AS [Nama Karyawan], bulan AS [Periode], month_num,
+                COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END) AS [Total Kehadiran],
+                SUM(status_telat) AS [Total Terlambat],
+                SUM(CASE WHEN status_detail = 'TIDAK MASUK' THEN 1 ELSE 0 END) AS [Total Tidak Masuk],
+                SUM(CASE WHEN status_detail = 'LUPA TAP MASUK' THEN 1 ELSE 0 END) AS [Total Lupa Tap Masuk],
+                SUM(CASE WHEN status_detail = 'LUPA TAP PULANG' THEN 1 ELSE 0 END) AS [Total Lupa Tap Pulang],
+                SUM(CASE WHEN status_detail = 'DINAS' THEN 1 ELSE 0 END) AS [Total Hari Dinas],
+                CAST(( SUM(status_telat) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_terlambat_num,
+                CAST(( SUM(CASE WHEN (raw_in IS NOT NULL OR status_detail = 'DINAS') AND status_telat = 0 THEN 1 ELSE 0 END) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_tidak_terlambat_num
+            FROM final_status
+            GROUP BY company, nrp, name, bulan, month_num
+        ),
+        dinas_text_summary AS (
+            SELECT nrp, month_num, STRING_AGG(keperluan, ', ') AS gabungan_keterangan
+            FROM (
+                SELECT DISTINCT nrp, MONTH(dinas_tanggal) AS month_num, keperluan 
+                FROM oc_dinas
+            ) x
+            GROUP BY nrp, month_num
+        ),
+        scored_data AS (
+            SELECT
+                a.company, a.nrp, a.[Nama Karyawan], a.[Periode], a.month_num,
+                a.[Total Kehadiran], a.[Total Hari Dinas], a.[Total Terlambat],
+                a.[Total Tidak Masuk], a.[Total Lupa Tap Masuk], a.[Total Lupa Tap Pulang],
+                ISNULL(CONCAT(a.pct_terlambat_num, '%'), '0%') AS [Persentase Terlambat],
+                ISNULL(CONCAT(a.pct_tidak_terlambat_num, '%'), '0%') AS [Persentase Tidak Terlambat],
+                dt.gabungan_keterangan AS [Keterangan Dinas],
+                CAST(
+                    (a.[Total Kehadiran] * w.w_kehadiran) 
+                    + (ISNULL(a.pct_tidak_terlambat_num, 0) * w.w_persen_hadir)
+                    - (a.[Total Terlambat] * w.w_terlambat) 
+                    - (a.[Total Tidak Masuk] * w.w_tidak_masuk) 
+                    - (a.[Total Lupa Tap Masuk] * w.w_lupa_masuk) 
+                    - (a.[Total Lupa Tap Pulang] * w.w_lupa_pulang)
+                AS DECIMAL(10,2)) AS [Skor Akhir]
+            FROM aggregated_data a
+            CROSS JOIN weight_config w
+            LEFT JOIN dinas_text_summary dt ON a.nrp = dt.nrp AND a.month_num = dt.month_num
+        )
+        SELECT 
+            RANK() OVER (ORDER BY SUM([Skor Akhir]) DESC, SUM([Total Kehadiran]) DESC) AS [Peringkat],
+            company AS [Company],
+            nrp AS [NRP],
+            [Nama Karyawan],
+            MAX([Periode]) AS [Periode],
+            SUM([Total Kehadiran]) AS [Total Kehadiran],
+            SUM([Total Hari Dinas]) AS [Total Hari Dinas],
+            SUM([Total Terlambat]) AS [Total Terlambat],
+            SUM([Total Tidak Masuk]) AS [Total Tidak Masuk],
+            SUM([Total Lupa Tap Masuk]) AS [Total Lupa Tap Masuk],
+            SUM([Total Lupa Tap Pulang]) AS [Total Lupa Tap Pulang],
+            MAX([Persentase Terlambat]) AS [Persentase Terlambat],
+            MAX([Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat],
+            MAX([Keterangan Dinas]) AS [Keterangan Dinas],
+            SUM([Skor Akhir]) AS [Skor Akhir]
+        FROM scored_data
+        GROUP BY company, nrp, [Nama Karyawan]
+        ORDER BY [Peringkat] ASC
+        OPTION (MAXRECURSION 0);
+    `;
+
+    const result = await request.query(query);
+
+    return result.recordset.map(row => ({
+        peringkat: Number(row.Peringkat),
+        company: row.Company,
+        nrp: row.NRP,
+        namaKaryawan: row['Nama Karyawan'],
+        periode: row.Periode,
+        totalKehadiran: Number(row['Total Kehadiran'] || 0),
+        totalHariDinas: Number(row['Total Hari Dinas'] || 0),
+        totalTerlambat: Number(row['Total Terlambat'] || 0),
+        totalTidakMasuk: Number(row['Total Tidak Masuk'] || 0),
+        totalLupaTapMasuk: Number(row['Total Lupa Tap Masuk'] || 0),
+        totalLupaTapPulang: Number(row['Total Lupa Tap Pulang'] || 0),
+        persentaseTerlambat: row['Persentase Terlambat'],
+        persentaseTidakTerlambat: row['Persentase Tidak Terlambat'],
+        keteranganDinas: row['Keterangan Dinas'] || '-',
+        skorAkhir: Number(row['Skor Akhir'] || 0)
+    }));
 }

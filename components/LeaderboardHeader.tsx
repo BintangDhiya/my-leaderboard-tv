@@ -7,6 +7,8 @@ interface HeaderProps {
     data: LeaderboardResponse;
     filter: 'this_month' | 'all' | 'custom';
     setFilter: (filter: 'this_month' | 'all' | 'custom') => void;
+    mode: 'task' | 'attendance' | 'both';
+    setMode: (mode: 'task' | 'attendance' | 'both') => void;
     lastUpdated: string;
 }
 
@@ -14,6 +16,8 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
     data,
     filter,
     setFilter,
+    mode,
+    setMode,
     lastUpdated,
 }) => {
     return (
@@ -48,6 +52,19 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                         <span>Rising Star: {data.risingStar.name} (▲ +{data.risingStar.rankDelta})</span>
                     </div>
                 )}
+
+                {/* Mode Filter Buttons */}
+                <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 mr-2">
+                    <button onClick={() => setMode('task')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'task' ? 'bg-neutral-800 text-purple-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                        Task Only
+                    </button>
+                    <button onClick={() => setMode('attendance')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'attendance' ? 'bg-neutral-800 text-blue-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                        Attendance
+                    </button>
+                    <button onClick={() => setMode('both')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'both' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                        Combined
+                    </button>
+                </div>
 
                 {/* Date Filter Buttons */}
                 <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1">

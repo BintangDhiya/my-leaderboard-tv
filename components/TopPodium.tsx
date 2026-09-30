@@ -4,9 +4,10 @@ import { Trophy, Medal, Flame, TrendingUp, TrendingDown, Minus } from 'lucide-re
 
 interface TopPodiumProps {
     podium: DeveloperStats[];
+    mode?: 'task' | 'attendance' | 'both';
 }
 
-export const TopPodium: React.FC<TopPodiumProps> = ({ podium }) => {
+export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) => {
     const rank1 = podium[0];
     const rank2 = podium[1];
     const rank3 = podium[2];
@@ -96,36 +97,96 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium }) => {
                 </div>
 
                 {/* Stats Grid Esports Bar */}
-                <div className="grid grid-cols-7 gap-1.5 pt-3 border-t border-neutral-800/80 text-center">
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
-                        <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
+                {mode === 'attendance' ? (
+                    <div className="grid grid-cols-6 gap-1 pt-3 border-t border-neutral-800/80 text-center">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
+                            <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Hadir</span>
+                            <span className="text-sm lg:text-base font-black text-emerald-400 font-mono">{dev.totalHadir}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Dinas</span>
+                            <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.totalDinas}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Telat</span>
+                            <span className="text-sm lg:text-base font-bold text-yellow-400 font-mono">{dev.totalTelat}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Absent</span>
+                            <span className="text-sm lg:text-base font-bold text-rose-400 font-mono">{dev.totalTidakMasuk}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Lupa Tap</span>
+                            <span className="text-sm lg:text-base font-bold text-orange-400 font-mono">{dev.totalLupaTap}</span>
+                        </div>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">On-Time %</span>
-                        <span className="text-sm lg:text-base font-black text-emerald-400 font-mono">{dev.onTimeRate}%</span>
+                ) : mode === 'both' ? (
+                    <div className="grid grid-cols-7 gap-1 pt-3 border-t border-neutral-800/80 text-center">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
+                            <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Task Pts</span>
+                            <span className="text-sm lg:text-base font-bold text-purple-400 font-mono">{dev.taskScore}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Att Pts</span>
+                            <span className="text-sm lg:text-base font-bold text-blue-400 font-mono">{dev.attendanceScore}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Closed</span>
+                            <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.closedTasks}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Hadir</span>
+                            <span className="text-sm lg:text-base font-bold text-emerald-400 font-mono">{dev.totalHadir}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">On-Time</span>
+                            <span className="text-sm lg:text-base font-black text-emerald-400 font-mono">{dev.onTimeRate}%</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Telat</span>
+                            <span className="text-sm lg:text-base font-bold text-yellow-400 font-mono">{dev.totalTelat}</span>
+                        </div>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Closed</span>
-                        <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.closedTasks}</span>
+                ) : (
+                    <div className="grid grid-cols-7 gap-1.5 pt-3 border-t border-neutral-800/80 text-center">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
+                            <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">On-Time %</span>
+                            <span className="text-sm lg:text-base font-black text-emerald-400 font-mono">{dev.onTimeRate}%</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Closed</span>
+                            <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.closedTasks}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Feedback</span>
+                            <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.feedbackTasks}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Early</span>
+                            <span className="text-sm lg:text-base font-bold text-emerald-400 font-mono">{dev.lebihCepatTasks || 0}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Done</span>
+                            <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.doneTasks || 0}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Late</span>
+                            <span className="text-sm lg:text-base font-bold text-rose-400 font-mono">{dev.lateTasks}</span>
+                        </div>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Feedback</span>
-                        <span className="text-sm lg:text-base font-bold text-neutral-200 font-mono">{dev.feedbackTasks}</span>
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Early</span>
-                        <span className="text-sm lg:text-base font-bold text-emerald-400 font-mono">{dev.lebihCepatTasks || 0}</span>
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Done</span>
-                        <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.doneTasks || 0}</span>
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Late</span>
-                        <span className="text-sm lg:text-base font-bold text-rose-400 font-mono">{dev.lateTasks}</span>
-                    </div>
-                </div>
+                )}
             </div>
         );
     };

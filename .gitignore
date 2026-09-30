@@ -40,6 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# data dummy (confidental)
-/data/
 repomix-output.xml

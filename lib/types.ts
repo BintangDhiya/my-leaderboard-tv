@@ -23,6 +23,32 @@ export interface RawTask {
     done_ratio: number;
 }
 
+export interface RawAttendance {
+    nrp: string;
+    attendance_date: string;
+    att_time: string; // format HH:mm:ss
+    trans: 'IN' | 'OUT';
+}
+
+// Interface untuk hasil query agregasi absensi dari Metabase CTE
+export interface AttendanceSummary {
+    peringkat: number;
+    company: string;
+    nrp: string;
+    namaKaryawan: string;
+    periode: string;
+    totalKehadiran: number;
+    totalHariDinas: number;
+    totalTerlambat: number;
+    totalTidakMasuk: number;
+    totalLupaTapMasuk: number;
+    totalLupaTapPulang: number;
+    persentaseTerlambat: string;
+    persentaseTidakTerlambat: string;
+    keteranganDinas: string;
+    skorAkhir: number;
+}
+
 export interface DeveloperStats {
     nrp: string;
     name: string;
@@ -33,7 +59,22 @@ export interface DeveloperStats {
     onTimeTasks: number;      // Total On-Time (Early + Done)
     lateTasks: number;        // Task terlambat (Late)
     onTimeRate: number;       // Persentase 0 - 100
-    score: number;            // Total Skor berbobot
+
+    // Data Attendance
+    totalHadir: number;
+    totalDinas: number;
+    totalTelat: number;
+    totalTidakMasuk: number;
+    totalLupaTap: number;
+    persentaseTerlambat?: string;
+    persentaseTidakTerlambat?: string;
+    keteranganDinas?: string;
+
+    // Skor
+    taskScore: number;
+    attendanceScore: number;
+    score: number; // Final Score
+
     currentRank: number;
     previousRank: number;
     rankDelta: number; // Positif (naik / hijau), Negatif (turun / merah), 0 (tetap)

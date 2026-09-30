@@ -11,6 +11,7 @@ import { Zap } from 'lucide-react';
 export default function LeaderboardPage() {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [filter, setFilter] = useState<'this_month' | 'all' | 'custom'>('this_month');
+  const [mode, setMode] = useState<'task' | 'attendance' | 'both'>('both'); // State Mode Baru
   const [initialLoading, setInitialLoading] = useState(true);
   const [isFilterChanging, setIsFilterChanging] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
@@ -18,7 +19,8 @@ export default function LeaderboardPage() {
   const fetchData = useCallback(async (showSkeleton = false) => {
     if (showSkeleton) setIsFilterChanging(true);
     try {
-      const res = await fetch(`/api/leaderboard?filter=${filter}`);
+      // Tambahkan parameter mode pada fetch
+      const res = await fetch(`/api/leaderboard?filter=${filter}&mode=${mode}`);
       if (!res.ok) throw new Error('Failed to fetch data');
       const json: LeaderboardResponse = await res.json();
       setData(json);
@@ -29,13 +31,13 @@ export default function LeaderboardPage() {
       setInitialLoading(false);
       if (showSkeleton) setIsFilterChanging(false);
     }
-  }, [filter]);
+  }, [filter, mode]);
 
   // Auto Polling setiap 30 detik untuk TV Display (Silent Update)
-  // Trigger skeleton HANYA saat filter berubah
+  // Trigger skeleton HANYA saat filter atau mode berubah
   useEffect(() => {
-    fetchData(true); // true = show skeleton on filter change
-    const interval = setInterval(() => fetchData(false), 30000); // false = silent background poll
+    fetchData(true); // true = show skeleton on filter/mode change
+    const interval = setInterval(() => fetchData(false), 60000); // false = silent background poll
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -89,15 +91,17 @@ export default function LeaderboardPage() {
           data={data}
           filter={filter}
           setFilter={setFilter}
+          mode={mode}
+          setMode={setMode}
           lastUpdated={lastUpdated}
         />
 
         {/* 2. Scoring System Guide (Compact TV Edition) */}
-        <ScoringGuideV2 />
+        <ScoringGuideV2 mode={mode} />
 
         {/* 3. Top 3 Podium Cards */}
         <section className="pt-2">
-          <TopPodium podium={data.podium} />
+          <TopPodium podium={data.podium} mode={mode} />
         </section>
 
         {/* 4. Table Ranks #4 ke bawah */}
@@ -110,7 +114,7 @@ export default function LeaderboardPage() {
               Showing {chasers.length} Developers
             </span>
           </div>
-          <LeaderboardTable chasers={chasers} />
+          <LeaderboardTable chasers={chasers} mode={mode} />
         </section>
       </div>
 
