@@ -42,7 +42,7 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                         height={50}
                     />
                     <h1 className="text-2xl lg:text-3xl font-black uppercase tracking-wider bg-clip-text">
-                        Performance Leaderboard
+                        {mode == 'task' ? 'Performance' : mode == 'attendance' ? 'Attendance' : 'Performance & Attendance'} Leaderboard
                     </h1>
                 </div>
                 <div className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
