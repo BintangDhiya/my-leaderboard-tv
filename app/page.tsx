@@ -12,6 +12,10 @@ export default function LeaderboardPage() {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [filter, setFilter] = useState<'this_month' | 'all' | 'custom'>('this_month');
   const [mode, setMode] = useState<'task' | 'attendance' | 'both'>('both'); // State Mode Baru
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
+  const [appliedStart, setAppliedStart] = useState<string>('');
+  const [appliedEnd, setAppliedEnd] = useState<string>('');
   const [initialLoading, setInitialLoading] = useState(true);
   const [isFilterChanging, setIsFilterChanging] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
@@ -19,8 +23,13 @@ export default function LeaderboardPage() {
   const fetchData = useCallback(async (showSkeleton = false) => {
     if (showSkeleton) setIsFilterChanging(true);
     try {
-      // Tambahkan parameter mode pada fetch
-      const res = await fetch(`/api/leaderboard?filter=${filter}&mode=${mode}`);
+      let url = `/api/leaderboard?filter=${filter}&mode=${mode}`;
+
+      if (filter === 'custom' && appliedStart && appliedEnd) {
+        url += `&start=${appliedStart}&end=${appliedEnd}`;
+      }
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch data');
       const json: LeaderboardResponse = await res.json();
       setData(json);
@@ -31,7 +40,7 @@ export default function LeaderboardPage() {
       setInitialLoading(false);
       if (showSkeleton) setIsFilterChanging(false);
     }
-  }, [filter, mode]);
+  }, [filter, mode, appliedStart, appliedEnd]);
 
   // Auto Polling setiap 30 detik untuk TV Display (Silent Update)
   // Trigger skeleton HANYA saat filter atau mode berubah
@@ -94,6 +103,14 @@ export default function LeaderboardPage() {
           mode={mode}
           setMode={setMode}
           lastUpdated={lastUpdated}
+          customStart={customStart}
+          setCustomStart={setCustomStart}
+          customEnd={customEnd}
+          setCustomEnd={setCustomEnd}
+          onApplyCustomRange={() => {
+            setAppliedStart(customStart);
+            setAppliedEnd(customEnd);
+          }}
         />
 
         {/* 2. Scoring System Guide (Compact TV Edition) */}
