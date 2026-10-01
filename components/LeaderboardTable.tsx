@@ -55,6 +55,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers, mod
                             {mode === 'attendance' ? (
                                 <>
                                     <th className="py-3 px-3 text-center">Kehadiran</th>
+                                    <th className="text-center">Masuk (Weekend)</th>
                                     <th className="py-3 px-3 text-center">Dinas</th>
                                     <th className="py-3 px-3 text-center">Terlambat</th>
                                     <th className="py-3 px-3 text-center">Absent</th>
@@ -110,6 +111,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers, mod
                                 {mode === 'attendance' ? (
                                     <>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-emerald-400">{dev.totalHadir}</td>
+                                        <td className="text-center font-mono text-xs font-bold text-emerald-600">{dev.totalWeekend}</td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-sky-400">{dev.totalDinas}</td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-yellow-400">{dev.totalTelat}</td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-rose-400">{dev.totalTidakMasuk}</td>

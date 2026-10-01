@@ -345,6 +345,7 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
             SELECT
                 company, nrp, name AS [Nama Karyawan], bulan AS [Periode], month_num,
                 COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END) AS [Total Kehadiran],
+                SUM(CASE WHEN raw_in IS NOT NULL AND is_holiday = 1 THEN 1 ELSE 0 END) AS [Masuk (Weekend)],
                 SUM(status_telat) AS [Total Terlambat],
                 SUM(CASE WHEN status_detail = 'TIDAK MASUK' THEN 1 ELSE 0 END) AS [Total Tidak Masuk],
                 SUM(CASE WHEN status_detail = 'LUPA TAP MASUK' THEN 1 ELSE 0 END) AS [Total Lupa Tap Masuk],
@@ -366,7 +367,7 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
         scored_data AS (
             SELECT
                 a.company, a.nrp, a.[Nama Karyawan], a.[Periode], a.month_num,
-                a.[Total Kehadiran], a.[Total Hari Dinas], a.[Total Terlambat],
+                a.[Total Kehadiran], a.[Masuk (Weekend)], a.[Total Hari Dinas], a.[Total Terlambat],
                 a.[Total Tidak Masuk], a.[Total Lupa Tap Masuk], a.[Total Lupa Tap Pulang],
                 ISNULL(CONCAT(a.pct_terlambat_num, '%'), '0%') AS [Persentase Terlambat],
                 ISNULL(CONCAT(a.pct_tidak_terlambat_num, '%'), '0%') AS [Persentase Tidak Terlambat],
@@ -390,6 +391,7 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
             [Nama Karyawan],
             MAX([Periode]) AS [Periode],
             SUM([Total Kehadiran]) AS [Total Kehadiran],
+            SUM([Masuk (Weekend)]) AS [Masuk (Weekend)],
             SUM([Total Hari Dinas]) AS [Total Hari Dinas],
             SUM([Total Terlambat]) AS [Total Terlambat],
             SUM([Total Tidak Masuk]) AS [Total Tidak Masuk],
@@ -414,6 +416,7 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
         namaKaryawan: row['Nama Karyawan'],
         periode: row.Periode,
         totalKehadiran: Number(row['Total Kehadiran'] || 0),
+        totalMskWeekend: Number(row['Masuk (Weekend)'] || 0),
         totalHariDinas: Number(row['Total Hari Dinas'] || 0),
         totalTerlambat: Number(row['Total Terlambat'] || 0),
         totalTidakMasuk: Number(row['Total Tidak Masuk'] || 0),

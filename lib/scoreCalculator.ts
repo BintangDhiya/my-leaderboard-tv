@@ -285,6 +285,7 @@ export function generateLeaderboard(
             // Attendance Properties
             totalHadir: devAtt ? devAtt.totalKehadiran : 0,
             totalDinas: devAtt ? devAtt.totalHariDinas : 0,
+            totalWeekend: devAtt ? devAtt.totalMskWeekend : 0,
             totalTelat: devAtt ? devAtt.totalTerlambat : 0,
             totalTidakMasuk: devAtt ? devAtt.totalTidakMasuk : 0,
             totalLupaTap: devAtt ? (devAtt.totalLupaTapMasuk + devAtt.totalLupaTapPulang) : 0,

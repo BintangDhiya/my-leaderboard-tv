@@ -38,6 +38,7 @@ export interface AttendanceSummary {
     namaKaryawan: string;
     periode: string;
     totalKehadiran: number;
+    totalMskWeekend: number;
     totalHariDinas: number;
     totalTerlambat: number;
     totalTidakMasuk: number;
@@ -62,6 +63,7 @@ export interface DeveloperStats {
 
     // Data Attendance
     totalHadir: number;
+    totalWeekend: number;
     totalDinas: number;
     totalTelat: number;
     totalTidakMasuk: number;
