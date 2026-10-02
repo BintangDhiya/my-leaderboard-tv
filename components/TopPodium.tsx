@@ -160,7 +160,7 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) =
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-7 gap-1.5 pt-3 border-t border-neutral-800/80 text-center">
+                    <div className="grid grid-cols-8 gap-1.5 pt-3 border-t border-neutral-800/80 text-center">
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
                             <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
@@ -184,6 +184,10 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) =
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Done</span>
                             <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.doneTasks || 0}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">In Progress</span>
+                            <span className="text-sm lg:text-base font-bold text-orange-400 font-mono">{dev.inProgressTasks || 0}</span>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Late</span>
