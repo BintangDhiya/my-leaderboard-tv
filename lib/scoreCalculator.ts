@@ -74,6 +74,20 @@ const NAME_ALIASES: Record<string, string> = {
     'RAFI FAUZAN': 'RAFI FAUZAN NUGROHO',
 };
 
+export const MONITORED_DEVELOPERS = [
+    { nrp: 'JI260011', name: 'AHMAD ANWAR HIDAYAT' },
+    { nrp: 'JICE25003', name: 'RANDY AFIF HERLAMBANG' },
+    { nrp: 'JICE25004', name: 'FARHAN DWICAHYO' },
+    { nrp: 'JICE25007', name: 'HANUNG RIZQI WIDIANTO' },
+    { nrp: 'JICE25008', name: 'MUHAMMAD ATSAL RIZANDRI' },
+    { nrp: 'JIMT22012', name: 'OVIANTO' },
+    { nrp: 'JIMT24002', name: 'YOSES DWI MAHESWARA' },
+    { nrp: 'JIMT24006', name: 'M. TAUFIQ AZRA HAROMAIN' },
+    { nrp: 'JIMT25004', name: 'ARIS PURNOMO' },
+    { nrp: 'JIMM21009', name: 'RAFI FAUZAN NUGROHO' },
+    { nrp: 'JI260374', name: 'BINTANG DHIYA ABIYYUSALAM' }
+];
+
 export function getCanonicalNrp(nrp: string): string {
     const clean = (nrp || '').trim().toUpperCase();
     return NRP_ALIASES[clean] || clean;
@@ -229,17 +243,25 @@ export function generateLeaderboard(
 
     // 3. Gabungkan Semua Developer secara unik berdasarkan Canonical NRP
     const unifiedDevs = new Map<string, { nrp: string, name: string }>();
+
+    // --- TAMBAHKAN LOOP INI (Menjamin 11 karyawan selalu ada) ---
+    MONITORED_DEVELOPERS.forEach(dev => {
+        unifiedDevs.set(getCanonicalNrp(dev.nrp), { nrp: dev.nrp, name: dev.name });
+    });
+
+    // Menimpa/mengupdate data jika mereka punya skor task
     currentScoresMap.forEach((dev) => {
         const cNrp = getCanonicalNrp(dev.nrp);
         const cName = getCanonicalName(dev.name);
         unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
     });
+
+    // Menimpa/mengupdate data jika mereka punya skor attendance
     attendanceData.forEach(att => {
         const cNrp = getCanonicalNrp(att.nrp);
         const cName = getCanonicalName(att.namaKaryawan);
-        if (!unifiedDevs.has(cNrp)) {
-            unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
-        }
+        // Tetap set untuk memastikan formatting nama mengikuti sumber terbaru
+        unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
     });
 
     // 4. Susun Data Mentah ke Array
