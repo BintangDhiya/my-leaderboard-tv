@@ -1,6 +1,7 @@
 import React from 'react';
 import { DeveloperStats } from '@/lib/types';
 import { TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
+import { renderBadges } from './AttendanceBadge';
 
 interface LeaderboardTableProps {
     chasers: DeveloperStats[];
@@ -38,6 +39,8 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers, mod
             </span>
         );
     };
+
+
 
     const isAttendanceMode = mode === 'attendance';
 
@@ -101,6 +104,7 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers, mod
                                         <div>
                                             <div className="font-bold text-neutral-200 line-clamp-1">{dev.name}</div>
                                             <div className="text-[10px] text-neutral-500 font-mono">NRP: {dev.nrp}</div>
+                                            {renderBadges(dev)}
                                         </div>
                                     </div>
                                 </td>

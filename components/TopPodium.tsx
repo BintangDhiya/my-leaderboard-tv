@@ -1,6 +1,7 @@
 import React from 'react';
 import { DeveloperStats } from '@/lib/types';
 import { Trophy, Medal, Flame, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { renderBadges } from './AttendanceBadge';
 
 interface TopPodiumProps {
     podium: DeveloperStats[];
@@ -82,6 +83,7 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) =
                                 {renderDelta(dev.rankDelta)}
                             </div>
                             <p className="text-xs text-neutral-400 font-mono">NRP: {dev.nrp}</p>
+                            {renderBadges(dev)}
                         </div>
                     </div>
 

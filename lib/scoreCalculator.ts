@@ -315,6 +315,12 @@ export function generateLeaderboard(
             persentaseTidakTerlambat: devAtt ? devAtt.persentaseTidakTerlambat : '0%',
             keteranganDinas: devAtt ? devAtt.keteranganDinas : '-',
 
+            // --- REAL-TIME BADGES ---
+            isDinasToday: devAtt ? devAtt.isDinasToday : false,
+            isActiveToday: devAtt ? devAtt.isActiveToday : false,
+            isLupaTapOutYesterday: devAtt ? devAtt.isLupaTapOutYesterday : false,
+            isLupaTapInToday: devAtt ? devAtt.isLupaTapInToday : false,
+
             // Score Breakdowns
             taskScore: tScore,
             attendanceScore: aScore,

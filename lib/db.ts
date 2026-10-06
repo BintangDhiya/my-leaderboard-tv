@@ -240,6 +240,22 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
     request.input('startDate', sql.VarChar(10), startDateStr);
     request.input('endDate', sql.VarChar(10), endDateStr);
 
+    // --- KALKULASI ZONA WAKTU WIB UNTUK REAL-TIME BADGES ---
+    const wibFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+    const nowParts = wibFormatter.format(now).split(', ');
+    const todayDateStr = nowParts[0];
+    const currentTimeStr = nowParts[1] === '24:00:00' ? '00:00:00' : nowParts[1];
+
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayDateStr = wibFormatter.format(yesterday).split(', ')[0];
+
+    request.input('todayDate', sql.VarChar(10), todayDateStr);
+    request.input('yesterdayDate', sql.VarChar(10), yesterdayDateStr);
+    request.input('currentTime', sql.VarChar(8), currentTimeStr);
+
     // Get CSV Data as VALUES snippet
     const holidayValues = getHolidayValuesSQL();
     const dinasValues = getDinasValuesSQL();
@@ -247,56 +263,35 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
     const query = `
         WITH 
         weight_config AS (
-            SELECT 
-                10.0 AS w_kehadiran,       
-                0.2  AS w_persen_hadir,    
-                5.0  AS w_terlambat,       
-                15.0 AS w_tidak_masuk,     
-                2.0  AS w_lupa_masuk,      
-                2.0  AS w_lupa_pulang      
+            SELECT 10.0 AS w_kehadiran, 0.2 AS w_persen_hadir, 5.0 AS w_terlambat, 15.0 AS w_tidak_masuk, 2.0 AS w_lupa_masuk, 2.0 AS w_lupa_pulang      
         ),
         oc_dinas AS (
             SELECT CAST(tanggal AS DATE) AS dinas_tanggal, nrp, nama AS dinas_nama, keperluan
-            FROM (VALUES 
-                ${dinasValues}
-            ) AS d(tanggal, nrp, nama, keperluan)
-            WHERE nrp != 'DUMMY'
+            FROM (VALUES ${dinasValues}) AS d(tanggal, nrp, nama, keperluan) WHERE nrp != 'DUMMY'
         ),
         calendar AS (
             SELECT CAST(@startDate AS DATE) AS tgl
             UNION ALL
-            SELECT DATEADD(DAY, 1, tgl)
-            FROM calendar
+            SELECT DATEADD(DAY, 1, tgl) FROM calendar
             WHERE tgl < CAST(@endDate AS DATE) AND tgl < CAST(GETDATE() AS DATE)
         ),
         holiday_list AS (
             SELECT CAST(tanggal AS DATE) AS tanggal, UPPER(keterangan) AS keterangan
-            FROM (VALUES 
-                ${holidayValues}
-            ) AS h(tanggal, keterangan)
-            WHERE keterangan != 'DUMMY'
+            FROM (VALUES ${holidayValues}) AS h(tanggal, keterangan) WHERE keterangan != 'DUMMY'
         ),
         employee_list AS (
-            SELECT nrp, company, name 
-            FROM (
+            SELECT nrp, company, name FROM (
                 VALUES 
-                ('JI260011',  'MTG', 'AHMAD ANWAR HIDAYAT'),
-                ('JICE25003', 'MTG', 'RANDY AFIF HERLAMBANG'),
-                ('JICE25004', 'MTG', 'FARHAN DWICAHYO'),
-                ('JICE25007', 'MTG', 'HANUNG RIZQI WIDIANTO'),
-                ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'),
-                ('JIMT22012', 'MTG', 'OVIANTO'),
-                ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'),
-                ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
-                ('JIMT25004', 'MTG', 'ARIS PURNOMO'),
-                ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
+                ('JI260011',  'MTG', 'AHMAD ANWAR HIDAYAT'), ('JICE25003', 'MTG', 'RANDY AFIF HERLAMBANG'),
+                ('JICE25004', 'MTG', 'FARHAN DWICAHYO'), ('JICE25007', 'MTG', 'HANUNG RIZQI WIDIANTO'),
+                ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'), ('JIMT22012', 'MTG', 'OVIANTO'),
+                ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'), ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
+                ('JIMT25004', 'MTG', 'ARIS PURNOMO'), ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
                 ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM')
             ) AS t(nrp, company, name)
         ),
         base_data AS (
-            SELECT c.tgl, e.nrp, e.company, e.name
-            FROM calendar c
-            CROSS JOIN employee_list e
+            SELECT c.tgl, e.nrp, e.company, e.name FROM calendar c CROSS JOIN employee_list e
         ),
         data_raw AS (
             SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
@@ -309,19 +304,14 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
         ),
         attendance_calc AS (
             SELECT nrp, attendance_date, MIN(CASE WHEN trans = 'IN' THEN att_time END) AS raw_in, MAX(CASE WHEN trans = 'OUT' THEN att_time END) AS raw_out
-            FROM data_raw
-            GROUP BY nrp, attendance_date
+            FROM data_raw GROUP BY nrp, attendance_date
         ),
         daily_status AS (
             SELECT
                 b.nrp, b.name, b.company, b.tgl AS attendance_date,
                 FORMAT(b.tgl, 'MMMM', 'id-ID') AS bulan, MONTH(b.tgl) AS month_num,
                 a.raw_in, a.raw_out, d.keperluan AS dinas_keperluan,
-                CASE 
-                    WHEN h.tanggal IS NOT NULL THEN 1
-                    WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1
-                    ELSE 0
-                END AS is_holiday
+                CASE WHEN h.tanggal IS NOT NULL THEN 1 WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1 ELSE 0 END AS is_holiday
             FROM base_data b
             LEFT JOIN attendance_calc a ON b.tgl = a.attendance_date AND b.nrp = a.nrp
             LEFT JOIN holiday_list h ON b.tgl = h.tanggal
@@ -353,16 +343,12 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
                 SUM(CASE WHEN status_detail = 'DINAS' THEN 1 ELSE 0 END) AS [Total Hari Dinas],
                 CAST(( SUM(status_telat) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_terlambat_num,
                 CAST(( SUM(CASE WHEN (raw_in IS NOT NULL OR status_detail = 'DINAS') AND status_telat = 0 THEN 1 ELSE 0 END) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_tidak_terlambat_num
-            FROM final_status
-            GROUP BY company, nrp, name, bulan, month_num
+            FROM final_status GROUP BY company, nrp, name, bulan, month_num
         ),
         dinas_text_summary AS (
-            SELECT nrp, month_num, STRING_AGG(keperluan, ', ') AS gabungan_keterangan
-            FROM (
-                SELECT DISTINCT nrp, MONTH(dinas_tanggal) AS month_num, keperluan 
-                FROM oc_dinas
-            ) x
-            GROUP BY nrp, month_num
+            SELECT nrp, month_num, STRING_AGG(keperluan, ', ') AS gabungan_keterangan FROM (
+                SELECT DISTINCT nrp, MONTH(dinas_tanggal) AS month_num, keperluan FROM oc_dinas
+            ) x GROUP BY nrp, month_num
         ),
         scored_data AS (
             SELECT
@@ -373,36 +359,60 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
                 ISNULL(CONCAT(a.pct_tidak_terlambat_num, '%'), '0%') AS [Persentase Tidak Terlambat],
                 dt.gabungan_keterangan AS [Keterangan Dinas],
                 CAST(
-                    (a.[Total Kehadiran] * w.w_kehadiran) 
-                    + (ISNULL(a.pct_tidak_terlambat_num, 0) * w.w_persen_hadir)
-                    - (a.[Total Terlambat] * w.w_terlambat) 
-                    - (a.[Total Tidak Masuk] * w.w_tidak_masuk) 
-                    - (a.[Total Lupa Tap Masuk] * w.w_lupa_masuk) 
-                    - (a.[Total Lupa Tap Pulang] * w.w_lupa_pulang)
+                    (a.[Total Kehadiran] * w.w_kehadiran) + (ISNULL(a.pct_tidak_terlambat_num, 0) * w.w_persen_hadir)
+                    - (a.[Total Terlambat] * w.w_terlambat) - (a.[Total Tidak Masuk] * w.w_tidak_masuk) 
+                    - (a.[Total Lupa Tap Masuk] * w.w_lupa_masuk) - (a.[Total Lupa Tap Pulang] * w.w_lupa_pulang)
                 AS DECIMAL(10,2)) AS [Skor Akhir]
-            FROM aggregated_data a
-            CROSS JOIN weight_config w
+            FROM aggregated_data a CROSS JOIN weight_config w
             LEFT JOIN dinas_text_summary dt ON a.nrp = dt.nrp AND a.month_num = dt.month_num
+        ),
+        -- === CTE BARU: REAL-TIME BADGE FLAGS ===
+        realtime_raw AS (
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily] WHERE attendance_date IN (CAST(@todayDate AS DATE), CAST(@yesterdayDate AS DATE))
+            UNION ALL
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily_history] WHERE attendance_date IN (CAST(@todayDate AS DATE), CAST(@yesterdayDate AS DATE))
+        ),
+        realtime_base AS (
+            SELECT 
+                e.nrp,
+                MIN(CASE WHEN r.attendance_date = CAST(@todayDate AS DATE) AND r.trans = 'IN' THEN r.att_time END) as today_in,
+                MAX(CASE WHEN r.attendance_date = CAST(@todayDate AS DATE) AND r.trans = 'OUT' THEN r.att_time END) as today_out,
+                MIN(CASE WHEN r.attendance_date = CAST(@yesterdayDate AS DATE) AND r.trans = 'IN' THEN r.att_time END) as yesterday_in,
+                MAX(CASE WHEN r.attendance_date = CAST(@yesterdayDate AS DATE) AND r.trans = 'OUT' THEN r.att_time END) as yesterday_out,
+                MAX(CASE WHEN d.dinas_tanggal = CAST(@todayDate AS DATE) THEN 1 ELSE 0 END) as is_dinas_today,
+                MAX(CASE WHEN h.tanggal = CAST(@todayDate AS DATE) THEN 1 ELSE 0 END) as is_holiday_today
+            FROM employee_list e
+            LEFT JOIN realtime_raw r ON e.nrp = r.nrp
+            LEFT JOIN oc_dinas d ON e.nrp = d.nrp AND d.dinas_tanggal = CAST(@todayDate AS DATE)
+            LEFT JOIN holiday_list h ON h.tanggal = CAST(@todayDate AS DATE)
+            GROUP BY e.nrp
+        ),
+        realtime_flags AS (
+            SELECT 
+                nrp,
+                CAST(is_dinas_today AS BIT) AS isDinasToday,
+                CAST(CASE WHEN today_in IS NOT NULL AND today_out IS NULL THEN 1 ELSE 0 END AS BIT) AS isActiveToday,
+                CAST(CASE WHEN yesterday_in IS NOT NULL AND yesterday_out IS NULL THEN 1 ELSE 0 END AS BIT) AS isLupaTapOutYesterday,
+                CAST(CASE WHEN is_dinas_today = 0 AND is_holiday_today = 0 AND DATEPART(WEEKDAY, CAST(@todayDate AS DATE)) NOT IN (1, 7) AND CAST(@currentTime AS TIME) > '07:30:00' AND today_in IS NULL THEN 1 ELSE 0 END AS BIT) AS isLupaTapInToday
+            FROM realtime_base
         )
+        -- === FINAL JOIN ===
         SELECT 
-            RANK() OVER (ORDER BY SUM([Skor Akhir]) DESC, SUM([Total Kehadiran]) DESC) AS [Peringkat],
-            company AS [Company],
-            nrp AS [NRP],
-            [Nama Karyawan],
-            MAX([Periode]) AS [Periode],
-            SUM([Total Kehadiran]) AS [Total Kehadiran],
-            SUM([Masuk (Weekend)]) AS [Masuk (Weekend)],
-            SUM([Total Hari Dinas]) AS [Total Hari Dinas],
-            SUM([Total Terlambat]) AS [Total Terlambat],
-            SUM([Total Tidak Masuk]) AS [Total Tidak Masuk],
-            SUM([Total Lupa Tap Masuk]) AS [Total Lupa Tap Masuk],
-            SUM([Total Lupa Tap Pulang]) AS [Total Lupa Tap Pulang],
-            MAX([Persentase Terlambat]) AS [Persentase Terlambat],
-            MAX([Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat],
-            MAX([Keterangan Dinas]) AS [Keterangan Dinas],
-            SUM([Skor Akhir]) AS [Skor Akhir]
-        FROM scored_data
-        GROUP BY company, nrp, [Nama Karyawan]
+            RANK() OVER (ORDER BY SUM(a.[Skor Akhir]) DESC, SUM(a.[Total Kehadiran]) DESC) AS [Peringkat],
+            a.company AS [Company], a.nrp AS [NRP], a.[Nama Karyawan], MAX(a.[Periode]) AS [Periode],
+            SUM(a.[Total Kehadiran]) AS [Total Kehadiran], SUM(a.[Masuk (Weekend)]) AS [Masuk (Weekend)],
+            SUM(a.[Total Hari Dinas]) AS [Total Hari Dinas], SUM(a.[Total Terlambat]) AS [Total Terlambat],
+            SUM(a.[Total Tidak Masuk]) AS [Total Tidak Masuk], SUM(a.[Total Lupa Tap Masuk]) AS [Total Lupa Tap Masuk],
+            SUM(a.[Total Lupa Tap Pulang]) AS [Total Lupa Tap Pulang], MAX(a.[Persentase Terlambat]) AS [Persentase Terlambat],
+            MAX(a.[Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat], MAX(a.[Keterangan Dinas]) AS [Keterangan Dinas],
+            SUM(a.[Skor Akhir]) AS [Skor Akhir],
+            MAX(CAST(rf.isDinasToday AS INT)) AS isDinasToday, MAX(CAST(rf.isActiveToday AS INT)) AS isActiveToday,
+            MAX(CAST(rf.isLupaTapOutYesterday AS INT)) AS isLupaTapOutYesterday, MAX(CAST(rf.isLupaTapInToday AS INT)) AS isLupaTapInToday
+        FROM scored_data a
+        LEFT JOIN realtime_flags rf ON a.nrp = rf.nrp
+        GROUP BY a.company, a.nrp, a.[Nama Karyawan]
         ORDER BY [Peringkat] ASC
         OPTION (MAXRECURSION 0);
     `;
@@ -425,6 +435,10 @@ export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promi
         persentaseTerlambat: row['Persentase Terlambat'],
         persentaseTidakTerlambat: row['Persentase Tidak Terlambat'],
         keteranganDinas: row['Keterangan Dinas'] || '-',
-        skorAkhir: Number(row['Skor Akhir'] || 0)
+        skorAkhir: Number(row['Skor Akhir'] || 0),
+        isDinasToday: Boolean(row.isDinasToday),
+        isActiveToday: Boolean(row.isActiveToday),
+        isLupaTapOutYesterday: Boolean(row.isLupaTapOutYesterday),
+        isLupaTapInToday: Boolean(row.isLupaTapInToday)
     }));
 }

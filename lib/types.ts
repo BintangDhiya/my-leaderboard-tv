@@ -48,6 +48,10 @@ export interface AttendanceSummary {
     persentaseTidakTerlambat: string;
     keteranganDinas: string;
     skorAkhir: number;
+    isDinasToday: boolean;
+    isActiveToday: boolean;
+    isLupaTapOutYesterday: boolean;
+    isLupaTapInToday: boolean;
 }
 
 export interface DeveloperStats {
@@ -86,6 +90,11 @@ export interface DeveloperStats {
     newTasks: number;        // status_id = 1 (New / Not Started)
     inProgressTasks: number; // status_id = 2 (In Progress)
     feedbackTasks: number;   // status_id = 4 (Feedback)
+
+    isDinasToday: boolean; // real-time badges
+    isActiveToday: boolean;
+    isLupaTapOutYesterday: boolean;
+    isLupaTapInToday: boolean;
 }
 
 export interface LeaderboardResponse {
