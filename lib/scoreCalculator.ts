@@ -85,7 +85,8 @@ export const MONITORED_DEVELOPERS = [
     { nrp: 'JIMT24006', name: 'M. TAUFIQ AZRA HAROMAIN' },
     { nrp: 'JIMT25004', name: 'ARIS PURNOMO' },
     { nrp: 'JIMM21009', name: 'RAFI FAUZAN NUGROHO' },
-    { nrp: 'JI260374', name: 'BINTANG DHIYA ABIYYUSALAM' }
+    { nrp: 'JI260374', name: 'BINTANG DHIYA ABIYYUSALAM' },
+    { nrp: 'JI260398', name: 'IRMA INNAYAH' }
 ];
 
 export function getCanonicalNrp(nrp: string): string {

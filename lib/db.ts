@@ -138,7 +138,7 @@ export async function getTasksFromDB(filterOptions?: GetFilter): Promise<RawTask
     const monitoredNRPs = [
         'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008',
         'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374',
-        'JIMM21005', 'JI260074' // Termasuk variasi/alias nrp lama agar aman
+        'JIMM21005', 'JI260074', 'JI260398' // Termasuk variasi/alias nrp lama agar aman
     ];
 
     const nrpParams = monitoredNRPs.map((nrp, i) => {
@@ -300,7 +300,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'), ('JIMT22012', 'MTG', 'OVIANTO'),
                 ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'), ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
                 ('JIMT25004', 'MTG', 'ARIS PURNOMO'), ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
-                ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM')
+                ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM'), ('JI260398',  'MTG', 'IRMA INNAYAH')
             ) AS t(nrp, company, name)
         ),
         base_data AS (
