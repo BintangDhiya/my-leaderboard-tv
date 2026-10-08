@@ -249,21 +249,6 @@ export function generateLeaderboard(
         unifiedDevs.set(getCanonicalNrp(dev.nrp), { nrp: dev.nrp, name: dev.name });
     });
 
-    // Menimpa/mengupdate data jika mereka punya skor task
-    currentScoresMap.forEach((dev) => {
-        const cNrp = getCanonicalNrp(dev.nrp);
-        const cName = getCanonicalName(dev.name);
-        unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
-    });
-
-    // Menimpa/mengupdate data jika mereka punya skor attendance
-    attendanceData.forEach(att => {
-        const cNrp = getCanonicalNrp(att.nrp);
-        const cName = getCanonicalName(att.namaKaryawan);
-        // Tetap set untuk memastikan formatting nama mengikuti sumber terbaru
-        unifiedDevs.set(cNrp, { nrp: cNrp, name: cName });
-    });
-
     // 4. Susun Data Mentah ke Array
     let leaderboardRaw: DeveloperStats[] = [];
 

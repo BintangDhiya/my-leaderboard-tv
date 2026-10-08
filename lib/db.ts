@@ -96,7 +96,7 @@ export async function getAttDbPool(): Promise<sql.ConnectionPool> {
     return attPoolPromise;
 }
 
-export interface GetTasksFilter {
+export interface GetFilter {
     filterType?: 'all' | 'this_month' | 'custom';
     customStart?: string;
     customEnd?: string;
@@ -107,7 +107,7 @@ export interface GetTasksFilter {
 // =========================================================
 // GET TASKS FROM REDMINE DB
 // =========================================================
-export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<RawTask[]> {
+export async function getTasksFromDB(filterOptions?: GetFilter): Promise<RawTask[]> {
     const pool = await getDbPool();
     const tableName = process.env.DB_TABLE || 'tasks';
     const request = pool.request();
@@ -134,6 +134,19 @@ export async function getTasksFromDB(filterOptions?: GetTasksFilter): Promise<Ra
         conditions.push('due_date >= CAST(@startDate AS DATETIME2)');
         conditions.push('due_date <= CAST(@endDate AS DATETIME2)');
     }
+
+    const monitoredNRPs = [
+        'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008',
+        'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374',
+        'JIMM21005', 'JI260074' // Termasuk variasi/alias nrp lama agar aman
+    ];
+
+    const nrpParams = monitoredNRPs.map((nrp, i) => {
+        const paramName = `monitoredNrp${i}`;
+        request.input(paramName, sql.VarChar, nrp);
+        return `@${paramName}`;
+    });
+    conditions.push(`nrp IN (${nrpParams.join(', ')})`);
 
     if (filterOptions?.excludedNames && filterOptions.excludedNames.length > 0) {
         const nameParams = filterOptions.excludedNames.map((name, i) => {
@@ -215,7 +228,7 @@ function getDinasValuesSQL(): string {
 // =========================================================
 // GET ATTENDANCE SUMMARY FROM DB_ATTENDANCE
 // =========================================================
-export async function getAttendanceFromDB(filterOptions?: GetTasksFilter): Promise<AttendanceSummary[]> {
+export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<AttendanceSummary[]> {
     const pool = await getAttDbPool();
     const request = pool.request();
 
