@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const filter = (searchParams.get('filter') || 'this_month') as 'all' | 'this_month' | 'custom';
         const mode = (searchParams.get('mode') || 'both') as 'task' | 'attendance' | 'both';
+        const role = (searchParams.get('role') || 'devs') as 'devs' | 'non-devs';
         const startDate = searchParams.get('start') || undefined;
         const endDate = searchParams.get('end') || undefined;
         const includeAll = searchParams.get('includeAll') === 'true';
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
         if (isDbConfigured) {
             try {
                 rawTasks = await getTasksFromDB({
-                    filterType: filter, customStart: startDate, customEnd: endDate, excludedNames, onlyClosed: false
+                    filterType: filter, customStart: startDate, customEnd: endDate, excludedNames, onlyClosed: false, role
                 });
             } catch (dbError) {
                 console.warn('[Leaderboard API] Failed to fetch Tasks, fallback to CSV:', dbError);
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
         if (isAttDbConfigured && (mode === 'attendance' || mode === 'both')) {
             try {
                 attendanceData = await getAttendanceFromDB({
-                    filterType: filter, customStart: startDate, customEnd: endDate
+                    filterType: filter, customStart: startDate, customEnd: endDate, role
                 });
             } catch (dbError) {
                 console.warn('[Leaderboard API] Failed to fetch Attendance:', dbError);
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest) {
             mode,
             startDate,
             endDate,
-            includeAll ? [] : DEFAULT_EXCLUDED_NAMES
+            includeAll ? [] : DEFAULT_EXCLUDED_NAMES,
+            role
         );
 
         return NextResponse.json(leaderboardData, { status: 200 });

@@ -11,7 +11,8 @@ import { Zap } from 'lucide-react';
 export default function LeaderboardPage() {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [filter, setFilter] = useState<'this_month' | 'all' | 'custom'>('this_month');
-  const [mode, setMode] = useState<'task' | 'attendance' | 'both'>('both'); // State Mode Baru
+  const [mode, setMode] = useState<'task' | 'attendance' | 'both'>('both');
+  const [role, setRole] = useState<'devs' | 'non-devs'>('devs');
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
   const [appliedStart, setAppliedStart] = useState<string>('');
@@ -23,8 +24,7 @@ export default function LeaderboardPage() {
   const fetchData = useCallback(async (showSkeleton = false) => {
     if (showSkeleton) setIsFilterChanging(true);
     try {
-      let url = `/api/leaderboard?filter=${filter}&mode=${mode}`;
-
+      let url = `/api/leaderboard?filter=${filter}&mode=${mode}&role=${role}&includeAll=true`;
       if (filter === 'custom' && appliedStart && appliedEnd) {
         url += `&start=${appliedStart}&end=${appliedEnd}`;
       }
@@ -40,7 +40,7 @@ export default function LeaderboardPage() {
       setInitialLoading(false);
       if (showSkeleton) setIsFilterChanging(false);
     }
-  }, [filter, mode, appliedStart, appliedEnd]);
+  }, [filter, mode, role, appliedStart, appliedEnd]);
 
   // Auto Polling setiap 30 detik untuk TV Display (Silent Update)
   // Trigger skeleton HANYA saat filter atau mode berubah
@@ -102,6 +102,8 @@ export default function LeaderboardPage() {
           setFilter={setFilter}
           mode={mode}
           setMode={setMode}
+          role={role}
+          setRole={setRole}
           lastUpdated={lastUpdated}
           customStart={customStart}
           setCustomStart={setCustomStart}

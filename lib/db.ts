@@ -102,6 +102,7 @@ export interface GetFilter {
     customEnd?: string;
     excludedNames?: string[];
     onlyClosed?: boolean;
+    role?: 'devs' | 'non-devs';
 }
 
 // =========================================================
@@ -146,7 +147,12 @@ export async function getTasksFromDB(filterOptions?: GetFilter): Promise<RawTask
         request.input(paramName, sql.VarChar, nrp);
         return `@${paramName}`;
     });
-    conditions.push(`nrp IN (${nrpParams.join(', ')})`);
+    // JIKA NON-DEVS GUNAKAN NOT IN, JIKA DEVS GUNAKAN IN
+    if (filterOptions?.role === 'non-devs') {
+        conditions.push(`nrp NOT IN (${nrpParams.join(', ')})`);
+    } else {
+        conditions.push(`nrp IN (${nrpParams.join(', ')})`);
+    }
 
     if (filterOptions?.excludedNames && filterOptions.excludedNames.length > 0) {
         const nameParams = filterOptions.excludedNames.map((name, i) => {
@@ -273,6 +279,57 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
     const holidayValues = getHolidayValuesSQL();
     const dinasValues = getDinasValuesSQL();
 
+    const role = filterOptions?.role || 'devs';
+    const monitoredNrpList = [
+        'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008', 'JI260398',
+        'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374'
+    ].map(n => `'${n}'`).join(', ');
+
+    let employeeListCTE = '';
+
+    if (role === 'devs') {
+        employeeListCTE = `
+        employee_list AS (
+            SELECT nrp, company, name FROM (
+                VALUES 
+                ('JI260011',  'MTG', 'AHMAD ANWAR HIDAYAT'), ('JICE25003', 'MTG', 'RANDY AFIF HERLAMBANG'),
+                ('JICE25004', 'MTG', 'FARHAN DWICAHYO'), ('JICE25007', 'MTG', 'HANUNG RIZQI WIDIANTO'),
+                ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'), ('JIMT22012', 'MTG', 'OVIANTO'),
+                ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'), ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
+                ('JIMT25004', 'MTG', 'ARIS PURNOMO'), ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
+                ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM'), ('JI260398',  'MTG', 'IRMA INNAYAH')
+            ) AS t(nrp, company, name)
+        )`;
+    } else {
+        // NON-DEVS MODE: Ambil data dari Task DB terlebih dahulu di Node.js
+        try {
+            const taskPool = await getDbPool(); // Gunakan koneksi Task DB!
+            const tableName = process.env.DB_TABLE || 'cis_jiep_tbl_redmine_bigdata_all_wi_digi';
+
+            const nonDevsResult = await taskPool.request().query(`
+                SELECT DISTINCT nrp, UPPER(nama) AS name 
+                FROM ${tableName} 
+                WHERE nrp NOT IN (${monitoredNrpList}) AND nrp IS NOT NULL AND LTRIM(RTRIM(nrp)) != ''
+            `);
+
+            if (nonDevsResult.recordset.length > 0) {
+                // Gunakan UNION ALL untuk menghindari limitasi 1000 baris pada VALUES SQL Server
+                const unionSelects = nonDevsResult.recordset.map(r =>
+                    `SELECT '${r.nrp}' AS nrp, 'OTHER' AS company, '${r.name.replace(/'/g, "''")}' AS name`
+                ).join(' UNION ALL\n            ');
+
+                employeeListCTE = `
+        employee_list AS (
+            ${unionSelects}
+        )`;
+            } else {
+                employeeListCTE = `employee_list AS (SELECT 'DUMMY' AS nrp, 'OTHER' AS company, 'DUMMY' AS name)`;
+            }
+        } catch (error) {
+            console.error("[MSSQL] Gagal mengambil non-devs dari Task DB:", error);
+            employeeListCTE = `employee_list AS (SELECT 'DUMMY' AS nrp, 'OTHER' AS company, 'DUMMY' AS name)`;
+        }
+    }
     const query = `
         WITH 
         weight_config AS (
@@ -292,17 +349,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             SELECT CAST(tanggal AS DATE) AS tanggal, UPPER(keterangan) AS keterangan
             FROM (VALUES ${holidayValues}) AS h(tanggal, keterangan) WHERE keterangan != 'DUMMY'
         ),
-        employee_list AS (
-            SELECT nrp, company, name FROM (
-                VALUES 
-                ('JI260011',  'MTG', 'AHMAD ANWAR HIDAYAT'), ('JICE25003', 'MTG', 'RANDY AFIF HERLAMBANG'),
-                ('JICE25004', 'MTG', 'FARHAN DWICAHYO'), ('JICE25007', 'MTG', 'HANUNG RIZQI WIDIANTO'),
-                ('JICE25008', 'MTG', 'MUHAMMAD ATSAL RIZANDRI'), ('JIMT22012', 'MTG', 'OVIANTO'),
-                ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'), ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
-                ('JIMT25004', 'MTG', 'ARIS PURNOMO'), ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
-                ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM'), ('JI260398',  'MTG', 'IRMA INNAYAH')
-            ) AS t(nrp, company, name)
-        ),
+        ${employeeListCTE},
         base_data AS (
             SELECT c.tgl, e.nrp, e.company, e.name FROM calendar c CROSS JOIN employee_list e
         ),

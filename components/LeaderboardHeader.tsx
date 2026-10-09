@@ -9,6 +9,8 @@ interface HeaderProps {
     setFilter: (filter: 'this_month' | 'all' | 'custom') => void;
     mode: 'task' | 'attendance' | 'both';
     setMode: (mode: 'task' | 'attendance' | 'both') => void;
+    role: 'devs' | 'non-devs';
+    setRole: (role: 'devs' | 'non-devs') => void;
     lastUpdated: string;
     customStart: string;
     setCustomStart: (date: string) => void;
@@ -23,6 +25,8 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
     setFilter,
     mode,
     setMode,
+    role,
+    setRole,
     lastUpdated,
     customStart,
     setCustomStart,
@@ -64,20 +68,33 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                 )}
 
                 {/* Mode Filter Buttons */}
-                <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1">
-                    <button onClick={() => setMode('task')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'task' ? 'bg-neutral-800 text-purple-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                        Task Only
-                    </button>
-                    <button onClick={() => setMode('attendance')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'attendance' ? 'bg-neutral-800 text-blue-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                        Attendance
-                    </button>
-                    <button onClick={() => setMode('both')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'both' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                        Combined
-                    </button>
+                <div className="flex flex-col gap-2 mr-2">
+                    {/* Mode Filter Buttons */}
+                    <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 w-fit">
+                        <button onClick={() => setMode('task')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'task' ? 'bg-neutral-800 text-purple-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                            Task Only
+                        </button>
+                        <button onClick={() => setMode('attendance')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'attendance' ? 'bg-neutral-800 text-blue-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                            Attendance
+                        </button>
+                        <button onClick={() => setMode('both')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'both' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                            Combined
+                        </button>
+                    </div>
+
+                    {/* Role Filter Buttons */}
+                    <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 w-fit">
+                        <button onClick={() => setRole('devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                            Devs (11)
+                        </button>
+                        <button onClick={() => setRole('non-devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'non-devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                            Non-Devs
+                        </button>
+                    </div>
                 </div>
 
                 {/* Date Filter Buttons */}
-                <div className="flex flex-col items-start gap-2">
+                <div className="flex flex-col items-start gap-2 h-[stretch]">
                     <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 items-center">
                         <button
                             onClick={() => {

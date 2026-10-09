@@ -204,7 +204,8 @@ export function generateLeaderboard(
     mode: 'task' | 'attendance' | 'both' = 'both',
     customStart?: string,
     customEnd?: string,
-    excludedNames: string[] = DEFAULT_EXCLUDED_NAMES
+    excludedNames: string[] = DEFAULT_EXCLUDED_NAMES,
+    role: 'devs' | 'non-devs' = 'devs'
 ): LeaderboardResponse {
 
     // --- BOBOT KOMBINASI SKOR (BISA DIUBAH DI SINI) ---
@@ -245,10 +246,30 @@ export function generateLeaderboard(
     // 3. Gabungkan Semua Developer secara unik berdasarkan Canonical NRP
     const unifiedDevs = new Map<string, { nrp: string, name: string }>();
 
-    // --- TAMBAHKAN LOOP INI (Menjamin 11 karyawan selalu ada) ---
-    MONITORED_DEVELOPERS.forEach(dev => {
-        unifiedDevs.set(getCanonicalNrp(dev.nrp), { nrp: dev.nrp, name: dev.name });
-    });
+    if (role === 'devs') {
+        // Kunci Leaderboard HANYA untuk 11 Developer
+        MONITORED_DEVELOPERS.forEach(dev => {
+            unifiedDevs.set(getCanonicalNrp(dev.nrp), { nrp: dev.nrp, name: dev.name });
+        });
+    } else {
+        // Mode NON-DEVS: Ambil semua yang masuk dari SQL (yang mana SQL sudah menyingkirkan 11 Devs)
+        const devNrps = new Set(MONITORED_DEVELOPERS.map(d => getCanonicalNrp(d.nrp)));
+
+        currentScoresMap.forEach((dev) => {
+            const cNrp = getCanonicalNrp(dev.nrp);
+            // Double layer protection: Pastikan benar-benar bukan devs
+            if (!devNrps.has(cNrp)) {
+                unifiedDevs.set(cNrp, { nrp: cNrp, name: getCanonicalName(dev.name) });
+            }
+        });
+
+        attendanceData.forEach(att => {
+            const cNrp = getCanonicalNrp(att.nrp);
+            if (!devNrps.has(cNrp)) {
+                unifiedDevs.set(cNrp, { nrp: cNrp, name: getCanonicalName(att.namaKaryawan) });
+            }
+        });
+    }
 
     // 4. Susun Data Mentah ke Array
     let leaderboardRaw: DeveloperStats[] = [];
