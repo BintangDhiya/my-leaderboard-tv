@@ -96,6 +96,18 @@ export async function getAttDbPool(): Promise<sql.ConnectionPool> {
     return attPoolPromise;
 }
 
+export const DEV_NRPS = [
+    'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008',
+    'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374',
+    'JIMM21005', 'JI260074', 'JI260398', // alias nrp lama
+];
+
+export const NON_DEV_NRPS = [
+    'LJIMT24001', 'LJIMT24004', 'LJIMT24015', 'LJIMT24016', 'LJICE25001',
+    'JI260036', 'JI260037', 'JI260307', 'JI260321', 'JI260352',
+    'JI260353', 'JI260356', 'JI260393', 'JI260394',
+];
+
 export interface GetFilter {
     filterType?: 'all' | 'this_month' | 'custom';
     customStart?: string;
@@ -136,23 +148,15 @@ export async function getTasksFromDB(filterOptions?: GetFilter): Promise<RawTask
         conditions.push('due_date <= CAST(@endDate AS DATETIME2)');
     }
 
-    const monitoredNRPs = [
-        'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008',
-        'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374',
-        'JIMM21005', 'JI260074', 'JI260398' // Termasuk variasi/alias nrp lama agar aman
-    ];
+    const nrpList = filterOptions?.role === 'non-devs' ? NON_DEV_NRPS : DEV_NRPS;
 
-    const nrpParams = monitoredNRPs.map((nrp, i) => {
+    const nrpParams = nrpList.map((nrp, i) => {
         const paramName = `monitoredNrp${i}`;
-        request.input(paramName, sql.VarChar, nrp);
+        request.input(paramName, sql.VarChar(50), nrp);
         return `@${paramName}`;
     });
-    // JIKA NON-DEVS GUNAKAN NOT IN, JIKA DEVS GUNAKAN IN
-    if (filterOptions?.role === 'non-devs') {
-        conditions.push(`nrp NOT IN (${nrpParams.join(', ')})`);
-    } else {
-        conditions.push(`nrp IN (${nrpParams.join(', ')})`);
-    }
+    // Devs maupun non-devs sama-sama pakai IN, bedanya di list-nya
+    conditions.push(`nrp IN (${nrpParams.join(', ')})`);
 
     if (filterOptions?.excludedNames && filterOptions.excludedNames.length > 0) {
         const nameParams = filterOptions.excludedNames.map((name, i) => {
@@ -280,10 +284,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
     const dinasValues = getDinasValuesSQL();
 
     const role = filterOptions?.role || 'devs';
-    const monitoredNrpList = [
-        'JI260011', 'JICE25003', 'JICE25004', 'JICE25007', 'JICE25008', 'JI260398',
-        'JIMT22012', 'JIMT24002', 'JIMT24006', 'JIMT25004', 'JIMM21009', 'JI260374'
-    ].map(n => `'${n}'`).join(', ');
+
 
     let employeeListCTE = '';
 
@@ -303,13 +304,16 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
     } else {
         // NON-DEVS MODE: Ambil data dari Task DB terlebih dahulu di Node.js
         try {
-            const taskPool = await getDbPool(); // Gunakan koneksi Task DB!
+            const taskPool = await getDbPool();
             const tableName = process.env.DB_TABLE || 'cis_jiep_tbl_redmine_bigdata_all_wi_digi';
 
+            const nonDevNrpSql = NON_DEV_NRPS.map(n => `'${n.replace(/'/g, "''")}'`).join(', ');
+
             const nonDevsResult = await taskPool.request().query(`
-                SELECT DISTINCT nrp, UPPER(nama) AS name 
-                FROM ${tableName} 
-                WHERE nrp NOT IN (${monitoredNrpList}) AND nrp IS NOT NULL AND LTRIM(RTRIM(nrp)) != ''
+                SELECT nrp, MAX(UPPER(nama)) AS name
+                FROM ${tableName}
+                WHERE nrp IN (${nonDevNrpSql})
+                GROUP BY nrp
             `);
 
             if (nonDevsResult.recordset.length > 0) {
