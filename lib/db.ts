@@ -114,7 +114,7 @@ export interface GetFilter {
     customEnd?: string;
     excludedNames?: string[];
     onlyClosed?: boolean;
-    role?: 'devs' | 'non-devs';
+    role?: 'devs' | 'non-devs' | 'pama';
 }
 
 // =========================================================
@@ -299,6 +299,27 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 ('JIMT24002', 'MTG', 'YOSES DWI MAHESWARA'), ('JIMT24006', 'MTG', 'M. TAUFIQ AZRA HAROMAIN'),
                 ('JIMT25004', 'MTG', 'ARIS PURNOMO'), ('JIMM21009', 'MW',  'RAFI FAUZAN NUGROHO'),
                 ('JI260374',  'MTG', 'BINTANG DHIYA ABIYYUSALAM'), ('JI260398',  'MTG', 'IRMA INNAYAH')
+            ) AS t(nrp, company, name)
+        )`;
+    } else if (role === 'pama') {
+        employeeListCTE = `
+        employee_list AS (
+            SELECT nrp, company, name FROM (
+                VALUES 
+                ('61130821', 'JIEP', 'ADE PANCA RIZKIAWAN'), ('61182334', 'JIEP', 'ADI PRANOTO'),
+                ('61120509', 'JIEP', 'AZIZ ASHARI'), ('61182183', 'JIEP', 'BAGAS EKO PRASETYO'),
+                ('61080350', 'JIEP', 'BONIFATIUS YUDHISTIRO WAHYU SAPUTRO'), ('61122848', 'JIEP', 'CHRISTIANTO'),
+                ('61130579', 'JIEP', 'FARDIN FAUZUL ADHIM'), ('61080415', 'JIEP', 'FEBRIANTO JAYA W'),
+                ('61091374', 'JIEP', 'FINDA MEGA ERWINSYAH'), ('61122031', 'JIEP', 'FIQHRI ARDIANSYAH'),
+                ('61113137', 'JIEP', 'GALAH RAMADHAN'), ('61170506', 'JIEP', 'GEORGE LAMHOT IMMANUEL'),
+                ('61102581', 'JIEP', 'INKY DANINDRA PIDEKSO'), ('61120560', 'JIEP', 'MOCHAMAD RIZKI PRATAMA'),
+                ('61101597', 'JIEP', 'MOHAMAD GANDHI ARDI WIBAWANTO'), ('61070370', 'JIEP', 'MUCHTAR ALI FACHRUDDIN'),
+                ('61240197', 'JIEP', 'MUHAMMAD FADHIL AL HAFIZ'), ('61150502', 'JIEP', 'MUHAMMAD IFAN SAPUTRA'),
+                ('61060645', 'JIEP', 'MUHAMMAD RUSTAM KAMALUDDIN'), ('61140314', 'JIEP', 'PURWANTO EKO NUGROHO'),
+                ('61182672', 'JIEP', 'RAHMAH FITRIANINGTYAS'), ('61130109', 'JIEP', 'REZA KHADAFI'),
+                ('61120955', 'JIEP', 'RIDHWAN WAHYUDI'), ('61060374', 'JIEP', 'RINTO WIBOWO'),
+                ('61101151', 'JIEP', 'SATYA ANDIKA'), ('61140270', 'JIEP', 'SUGIYANTO'),
+                ('61111398', 'JIEP', 'WILDAN FIRDAUS')
             ) AS t(nrp, company, name)
         )`;
     } else {

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const filter = (searchParams.get('filter') || 'this_month') as 'all' | 'this_month' | 'custom';
         const mode = (searchParams.get('mode') || 'both') as 'task' | 'attendance' | 'both';
-        const role = (searchParams.get('role') || 'devs') as 'devs' | 'non-devs';
+        const role = (searchParams.get('role') || 'devs') as 'devs' | 'non-devs' | 'pama';
         const startDate = searchParams.get('start') || undefined;
         const endDate = searchParams.get('end') || undefined;
         const includeAll = searchParams.get('includeAll') === 'true';

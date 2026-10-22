@@ -205,7 +205,7 @@ export function generateLeaderboard(
     customStart?: string,
     customEnd?: string,
     excludedNames: string[] = DEFAULT_EXCLUDED_NAMES,
-    role: 'devs' | 'non-devs' = 'devs'
+    role: 'devs' | 'non-devs' | 'pama' = 'devs'
 ): LeaderboardResponse {
 
     // --- BOBOT KOMBINASI SKOR (BISA DIUBAH DI SINI) ---

@@ -9,8 +9,8 @@ interface HeaderProps {
     setFilter: (filter: 'this_month' | 'all' | 'custom') => void;
     mode: 'task' | 'attendance' | 'both';
     setMode: (mode: 'task' | 'attendance' | 'both') => void;
-    role: 'devs' | 'non-devs';
-    setRole: (role: 'devs' | 'non-devs') => void;
+    role: 'devs' | 'non-devs' | 'pama';
+    setRole: (role: 'devs' | 'non-devs' | 'pama') => void;
     lastUpdated: string;
     customStart: string;
     setCustomStart: (date: string) => void;
@@ -90,6 +90,11 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                         <button onClick={() => setRole('non-devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'non-devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
                             Non-Devs
                         </button>
+                        {mode == 'attendance' && (
+                            <button onClick={() => setRole('pama')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'pama' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
+                                PAMA
+                            </button>
+                        )}
                     </div>
                 </div>
 

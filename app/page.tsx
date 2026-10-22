@@ -12,7 +12,7 @@ export default function LeaderboardPage() {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [filter, setFilter] = useState<'this_month' | 'all' | 'custom'>('this_month');
   const [mode, setMode] = useState<'task' | 'attendance' | 'both'>('both');
-  const [role, setRole] = useState<'devs' | 'non-devs'>('devs');
+  const [role, setRole] = useState<'devs' | 'non-devs' | 'pama'>('devs');
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
   const [appliedStart, setAppliedStart] = useState<string>('');
@@ -22,6 +22,7 @@ export default function LeaderboardPage() {
   const [lastUpdated, setLastUpdated] = useState('');
 
   const fetchData = useCallback(async (showSkeleton = false) => {
+    if (mode != 'attendance' && role == 'pama') setRole('devs');
     if (showSkeleton) setIsFilterChanging(true);
     try {
       let url = `/api/leaderboard?filter=${filter}&mode=${mode}&role=${role}&includeAll=true`;
