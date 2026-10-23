@@ -1,8 +1,55 @@
+import { Pool } from 'pg';
 import sql from 'mssql';
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse/sync';
 import { RawTask, AttendanceSummary } from './types';
+
+// =========================================================
+// POSTGRESQL DB CONNECTION (SURAT PENGAJUAN)
+// =========================================================
+const pgPool = new Pool({
+    user: process.env.PG_USER || 'postgres',
+    password: process.env.PG_PASSWORD || 'password',
+    host: process.env.PG_HOST || 'localhost',
+    port: process.env.PG_PORT ? parseInt(process.env.PG_PORT, 10) : 5432,
+    database: process.env.PG_DB_NAME || 'digi_db',
+});
+
+// Fungsi pembantu untuk menarik dan mengekspansi tanggal dari Postgres
+async function getSuratIzinValuesSQL(startDate: string, endDate: string): Promise<string> {
+    try {
+        // Ambil data yang beririsan dengan filter tanggal saat ini (Misal status_pengajuan_id = 1 untuk disetujui)
+        const query = `
+            SELECT nrp_pemilik, tanggal_mulai, tanggal_selesai, keterangan 
+            FROM digi.tbl_t_pengajuan_surat
+            WHERE tanggal_selesai >= $1 AND tanggal_mulai <= $2
+            AND status_pengajuan_id = 2 -- Sesuaikan dengan ID status "2: Disetujui, 1: Menunggu"
+        `;
+        const { rows } = await pgPool.query(query, [startDate, endDate]);
+
+        if (rows.length === 0) return "('1900-01-01', 'DUMMY', 'DUMMY')";
+
+        const values = [];
+        for (const row of rows) {
+            // Karena izin bisa lebih dari 1 hari, kita ekspansi tanggalnya (contoh: 6-7 Okt menjadi 2 baris)
+            let current = new Date(row.tanggal_mulai);
+            const end = new Date(row.tanggal_selesai);
+
+            while (current <= end) {
+                const dateStr = current.toISOString().split('T')[0];
+                const ket = (row.keterangan || 'Izin/Sakit').replace(/'/g, "''"); // Escape single quotes
+                values.push(`('${dateStr}', '${row.nrp_pemilik}', '${ket}')`);
+                current.setDate(current.getDate() + 1);
+            }
+        }
+
+        return values.length > 0 ? values.join(',\n') : "('1900-01-01', 'DUMMY', 'DUMMY')";
+    } catch (e) {
+        console.error("[Postgres] Gagal mengambil surat izin:", e);
+        return "('1900-01-01', 'DUMMY', 'DUMMY')";
+    }
+}
 
 // =========================================================
 // TASK DB CONNECTION
@@ -282,6 +329,11 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
     // Get CSV Data as VALUES snippet
     const holidayValues = getHolidayValuesSQL();
     const dinasValues = getDinasValuesSQL();
+    const suratIzinValues = await getSuratIzinValuesSQL(startDateStr, endDateStr);
+    const suratIzinValuesDummy = `
+('2026-10-15', 'JI260374', 'diagnosis : demam'),
+('2026-10-16', 'JI260374', 'diagnosis : demam')
+    `
 
     const role = filterOptions?.role || 'devs';
 
@@ -375,6 +427,10 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             FROM (VALUES ${holidayValues}) AS h(tanggal, keterangan) WHERE keterangan != 'DUMMY'
         ),
         ${employeeListCTE},
+        surat_izin AS (
+            SELECT CAST(tanggal AS DATE) AS izin_tanggal, nrp, keperluan
+            FROM (VALUES ${suratIzinValues}) AS s(tanggal, nrp, keperluan) WHERE nrp != 'DUMMY'
+        ),
         base_data AS (
             SELECT c.tgl, e.nrp, e.company, e.name FROM calendar c CROSS JOIN employee_list e
         ),
@@ -396,16 +452,19 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 b.nrp, b.name, b.company, b.tgl AS attendance_date,
                 FORMAT(b.tgl, 'MMMM', 'id-ID') AS bulan, MONTH(b.tgl) AS month_num,
                 a.raw_in, a.raw_out, d.keperluan AS dinas_keperluan,
+                si.keperluan AS izin_keperluan, /* NEW: Ambil Keterangan Izin */
                 CASE WHEN h.tanggal IS NOT NULL THEN 1 WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1 ELSE 0 END AS is_holiday
             FROM base_data b
             LEFT JOIN attendance_calc a ON b.tgl = a.attendance_date AND b.nrp = a.nrp
             LEFT JOIN holiday_list h ON b.tgl = h.tanggal
             LEFT JOIN oc_dinas d ON b.tgl = d.dinas_tanggal AND b.nrp = d.nrp
+            LEFT JOIN surat_izin si ON b.tgl = si.izin_tanggal AND b.nrp = si.nrp /* NEW: Join ke tabel Izin */
         ),
         final_status AS (
             SELECT *,
                 CASE
                     WHEN raw_in IS NULL AND raw_out IS NULL AND dinas_keperluan IS NOT NULL THEN 'DINAS'
+                    WHEN izin_keperluan IS NOT NULL THEN 'IZIN' /* NEW: Anggap Izin jika ada surat */
                     WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 0 THEN 'TIDAK MASUK'
                     WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 1 THEN 'LIBUR'
                     WHEN raw_in IS NOT NULL AND raw_out IS NULL THEN 'LUPA TAP PULANG'
@@ -419,15 +478,22 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         aggregated_data AS (
             SELECT
                 company, nrp, name AS [Nama Karyawan], bulan AS [Periode], month_num,
-                COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END) AS [Total Kehadiran],
+                /* NEW: Tambahkan IZIN ke [Total Kehadiran] agar dihitung hadir otomatis */
+                COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' OR status_detail = 'IZIN' THEN 1 END) AS [Total Kehadiran],
+                
                 SUM(CASE WHEN raw_in IS NOT NULL AND is_holiday = 1 THEN 1 ELSE 0 END) AS [Masuk (Weekend)],
                 SUM(status_telat) AS [Total Terlambat],
                 SUM(CASE WHEN status_detail = 'TIDAK MASUK' THEN 1 ELSE 0 END) AS [Total Tidak Masuk],
                 SUM(CASE WHEN status_detail = 'LUPA TAP MASUK' THEN 1 ELSE 0 END) AS [Total Lupa Tap Masuk],
                 SUM(CASE WHEN status_detail = 'LUPA TAP PULANG' THEN 1 ELSE 0 END) AS [Total Lupa Tap Pulang],
+                
+                /* Opsional: Anda bisa menggabungkan visualisasi Izin dan Dinas */
                 SUM(CASE WHEN status_detail = 'DINAS' THEN 1 ELSE 0 END) AS [Total Hari Dinas],
-                CAST(( SUM(status_telat) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_terlambat_num,
-                CAST(( SUM(CASE WHEN (raw_in IS NOT NULL OR status_detail = 'DINAS') AND status_telat = 0 THEN 1 ELSE 0 END) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_tidak_terlambat_num
+                SUM(CASE WHEN status_detail = 'IZIN' THEN 1 ELSE 0 END) AS [Total Izin],
+                
+                /* NEW: Lindungi perhitungan persentase ketepatan waktu dengan menambahkan klausa IZIN */
+                CAST(( SUM(status_telat) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' OR status_detail = 'IZIN' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_terlambat_num,
+                CAST(( SUM(CASE WHEN (raw_in IS NOT NULL OR status_detail = 'DINAS' OR status_detail = 'IZIN') AND status_telat = 0 THEN 1 ELSE 0 END) * 100.0 ) / NULLIF(COUNT(CASE WHEN raw_in IS NOT NULL OR status_detail = 'DINAS' OR status_detail = 'IZIN' THEN 1 END), 0) AS DECIMAL(10,2)) AS pct_tidak_terlambat_num
             FROM final_status GROUP BY company, nrp, name, bulan, month_num
         ),
         dinas_text_summary AS (
@@ -438,7 +504,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         scored_data AS (
             SELECT
                 a.company, a.nrp, a.[Nama Karyawan], a.[Periode], a.month_num,
-                a.[Total Kehadiran], a.[Masuk (Weekend)], a.[Total Hari Dinas], a.[Total Terlambat],
+                a.[Total Kehadiran], a.[Masuk (Weekend)], a.[Total Hari Dinas], a.[Total Izin], a.[Total Terlambat],
                 a.[Total Tidak Masuk], a.[Total Lupa Tap Masuk], a.[Total Lupa Tap Pulang],
                 ISNULL(CONCAT(a.pct_terlambat_num, '%'), '0%') AS [Persentase Terlambat],
                 ISNULL(CONCAT(a.pct_tidak_terlambat_num, '%'), '0%') AS [Persentase Tidak Terlambat],
@@ -488,7 +554,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             RANK() OVER (ORDER BY SUM(a.[Skor Akhir]) DESC, SUM(a.[Total Kehadiran]) DESC) AS [Peringkat],
             a.company AS [Company], a.nrp AS [NRP], a.[Nama Karyawan], MAX(a.[Periode]) AS [Periode],
             SUM(a.[Total Kehadiran]) AS [Total Kehadiran], SUM(a.[Masuk (Weekend)]) AS [Masuk (Weekend)],
-            SUM(a.[Total Hari Dinas]) AS [Total Hari Dinas], SUM(a.[Total Terlambat]) AS [Total Terlambat],
+            SUM(a.[Total Hari Dinas]) AS [Total Hari Dinas], SUM(a.[Total Izin]) AS [Total Izin], SUM(a.[Total Terlambat]) AS [Total Terlambat],
             SUM(a.[Total Tidak Masuk]) AS [Total Tidak Masuk], SUM(a.[Total Lupa Tap Masuk]) AS [Total Lupa Tap Masuk],
             SUM(a.[Total Lupa Tap Pulang]) AS [Total Lupa Tap Pulang], MAX(a.[Persentase Terlambat]) AS [Persentase Terlambat],
             MAX(a.[Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat], MAX(a.[Keterangan Dinas]) AS [Keterangan Dinas],
@@ -513,6 +579,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         totalKehadiran: Number(row['Total Kehadiran'] || 0),
         totalMskWeekend: Number(row['Masuk (Weekend)'] || 0),
         totalHariDinas: Number(row['Total Hari Dinas'] || 0),
+        totalHariIzin: Number(row['Total Izin'] || 0),
         totalTerlambat: Number(row['Total Terlambat'] || 0),
         totalTidakMasuk: Number(row['Total Tidak Masuk'] || 0),
         totalLupaTapMasuk: Number(row['Total Lupa Tap Masuk'] || 0),

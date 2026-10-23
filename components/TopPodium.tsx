@@ -100,7 +100,7 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) =
 
                 {/* Stats Grid Esports Bar */}
                 {mode === 'attendance' ? (
-                    <div className="grid grid-cols-7 gap-1 pt-3 border-t border-neutral-800/80 text-center">
+                    <div className="grid grid-cols-8 gap-1 pt-3 border-t border-neutral-800/80 text-center">
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Score</span>
                             <span className="text-sm lg:text-base font-black text-amber-400 font-mono">{dev.score.toLocaleString()}</span>
@@ -116,6 +116,10 @@ export const TopPodium: React.FC<TopPodiumProps> = ({ podium, mode = 'both' }) =
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Dinas</span>
                             <span className="text-sm lg:text-base font-bold text-sky-400 font-mono">{dev.totalDinas}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Izin</span>
+                            <span className="text-sm lg:text-base font-bold text-indigo-400 font-mono">{dev.totalIzin}</span>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Telat</span>

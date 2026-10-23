@@ -40,6 +40,7 @@ export interface AttendanceSummary {
     totalKehadiran: number;
     totalMskWeekend: number;
     totalHariDinas: number;
+    totalHariIzin: number;
     totalTerlambat: number;
     totalTidakMasuk: number;
     totalLupaTapMasuk: number;
@@ -69,6 +70,7 @@ export interface DeveloperStats {
     totalHadir: number;
     totalWeekend: number;
     totalDinas: number;
+    totalIzin: number;
     totalTelat: number;
     totalTidakMasuk: number;
     totalLupaTap: number;
