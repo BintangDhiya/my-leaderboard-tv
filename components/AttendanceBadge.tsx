@@ -5,7 +5,9 @@ export const renderBadges = (dev: DeveloperStats) => {
     const badges = [];
     const now = new Date();
     // Cek jika jam kerja sudah lewat 16:30
-    const isPastTapOut = now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 30);
+    const isPastTapOut = now.getDay() === 5
+        ? now.getHours() >= 17 // Jika hari Jumat: periksa apakah jam 17:00 ke atas
+        : now.getHours() > 16 || (now.getHours() === 16 && now.getMinutes() >= 30); // Hari biasa: 16:30
 
     if (dev.isDinasToday) {
         badges.push(<span key="dinas" className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[9px] font-bold uppercase tracking-wider">Dinas</span>);
