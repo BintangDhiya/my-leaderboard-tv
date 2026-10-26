@@ -282,6 +282,62 @@ function getDinasValuesSQL(): string {
     }
 }
 
+function getPamaSuratValuesSQL(): { dinas: string, izin: string } {
+    try {
+        const filePath = path.join(process.cwd(), 'data', 'pama-list-dinas.csv');
+        if (!fs.existsSync(filePath)) return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+
+        const records = parse(fs.readFileSync(filePath, 'utf-8'), { columns: true, skip_empty_lines: true }) as any;
+        if (records.length === 0) return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+
+        const dinasVals: string[] = [];
+        const izinVals: string[] = [];
+
+        for (const row of records) {
+            // Pecah string tanggal untuk menghindari bug Timezone Shift pada objek Date JavaScript
+            const [yStart, mStart, dStart] = (row.START_DATE_CONV || '').split('/');
+            const [yEnd, mEnd, dEnd] = (row.END_DATE_CONV || '').split('/');
+
+            if (!yStart || !yEnd) continue;
+
+            let current = new Date(Number(yStart), Number(mStart) - 1, Number(dStart));
+            const end = new Date(Number(yEnd), Number(mEnd) - 1, Number(dEnd));
+
+            const nrp = String(row.NRP).trim();
+            const nama = (row.NAME || '').replace(/'/g, "''"); // Escape petik tunggal untuk SQL
+            const keperluan = (row.KEPERLUAN || row.TIPE_SURAT || '').replace(/'/g, "''");
+            const tipeSurat = (row.TIPE_SURAT || '').trim().toUpperCase();
+
+            // Ekspansi tanggal (jika dari tgl 19 s/d 24, maka akan dicetak 6 baris)
+            while (current <= end) {
+                const yOut = current.getFullYear();
+                const mOut = String(current.getMonth() + 1).padStart(2, '0');
+                const dOut = String(current.getDate()).padStart(2, '0');
+                const dateStr = `${yOut}-${mOut}-${dOut}`;
+
+                // Jika Tipe ST (Surat Tugas) masukkan ke CTE Dinas, selain itu CTE Izin/Cuti
+                if (tipeSurat === 'ST') {
+                    // Sesuai format CTE oc_dinas: (tanggal, nrp, nama, keperluan)
+                    dinasVals.push(`('${dateStr}', '${nrp}', '${nama}', '${keperluan}')`);
+                } else {
+                    // Sesuai format CTE surat_izin: (tanggal, nrp, keperluan)
+                    izinVals.push(`('${dateStr}', '${nrp}', '${keperluan}')`);
+                }
+
+                current.setDate(current.getDate() + 1); // Lanjut ke +1 Hari berikutnya
+            }
+        }
+
+        return {
+            dinas: dinasVals.length > 0 ? dinasVals.join(',\n            ') : "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')",
+            izin: izinVals.length > 0 ? izinVals.join(',\n            ') : "('1900-01-01', 'DUMMY', 'DUMMY')"
+        };
+    } catch (e) {
+        console.error("[PAMA Surat] Error membaca CSV pama-list-dinas:", e);
+        return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+    }
+}
+
 // =========================================================
 // GET ATTENDANCE SUMMARY FROM DB_ATTENDANCE
 // =========================================================
@@ -328,8 +384,8 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
 
     // Get CSV Data as VALUES snippet
     const holidayValues = getHolidayValuesSQL();
-    const dinasValues = getDinasValuesSQL();
-    const suratIzinValues = await getSuratIzinValuesSQL(startDateStr, endDateStr);
+    let dinasValues = getDinasValuesSQL();
+    let suratIzinValues = await getSuratIzinValuesSQL(startDateStr, endDateStr);
     const suratIzinValuesDummy = `
 ('2026-10-15', 'JI260374', 'diagnosis : demam'),
 ('2026-10-16', 'JI260374', 'diagnosis : demam')
@@ -337,6 +393,11 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
 
     const role = filterOptions?.role || 'devs';
 
+    if (role === 'pama') {
+        const pamaSurat = getPamaSuratValuesSQL();
+        dinasValues = pamaSurat.dinas;
+        suratIzinValues = pamaSurat.izin;
+    }
 
     let employeeListCTE = '';
 
