@@ -436,65 +436,49 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             ) AS t(nrp, company, name)
         )`;
     } else {
-        // NON-DEVS MODE: Ambil data dari Task DB terlebih dahulu di Node.js
-        try {
-            const taskPool = await getDbPool();
-            const tableName = process.env.DB_TABLE || 'cis_jiep_tbl_redmine_bigdata_all_wi_digi';
-
-            const nonDevNrpSql = NON_DEV_NRPS.map(n => `'${n.replace(/'/g, "''")}'`).join(', ');
-
-            const nonDevsResult = await taskPool.request().query(`
-                SELECT nrp, MAX(UPPER(nama)) AS name
-                FROM ${tableName}
-                WHERE nrp IN (${nonDevNrpSql})
-                GROUP BY nrp
-            `);
-
-            if (nonDevsResult.recordset.length > 0) {
-                // Gunakan UNION ALL untuk menghindari limitasi 1000 baris pada VALUES SQL Server
-                const unionSelects = nonDevsResult.recordset.map(r =>
-                    `SELECT '${r.nrp}' AS nrp, 'OTHER' AS company, '${r.name.replace(/'/g, "''")}' AS name`
-                ).join(' UNION ALL\n            ');
-
-                employeeListCTE = `
+        employeeListCTE = `
         employee_list AS (
-            ${unionSelects}
+            SELECT nrp, company, name FROM (
+                VALUES 
+                ('JI260321', 'GSI', 'GERALD EVAN ARIAPRAJA LOPPIES'), ('JI260352', 'GSI', 'DIVO WIBOWO ADI'),
+                ('JI260353', 'GSI', 'SHIFA RAMDAN NUGRAHA'), ('JI260356', 'GSI', 'FEBRIAN ZULMI'),
+                ('JI260393', 'GSI', 'SUFI ANUGRAH'), ('JI260394', 'GSI', 'YODHA ARDIANSYAH'),
+                ('JI260036', 'MTG', 'MUHAMMAD JIBRAN HADY'), ('JI260037', 'MTG', 'BAYU SUTRA'),
+                ('JI260307', 'MTG', 'MUHAMAD ALVIANI'), ('JICE25001', 'MTG', 'ODITYA ANDALAS PUTRA'),
+                ('JIMT24004', 'MTG', 'TITIN ERVINA SARI'), ('JIMT24015', 'MTG', 'OKTAVIA NUR AZIZAH'),
+                ('JIMT24016', 'MTG', 'GADING AULIA')
+            ) AS t(nrp, company, name)
         )`;
-            } else {
-                employeeListCTE = `employee_list AS (SELECT 'DUMMY' AS nrp, 'OTHER' AS company, 'DUMMY' AS name)`;
-            }
-        } catch (error) {
-            console.error("[MSSQL] Gagal mengambil non-devs dari Task DB:", error);
-            employeeListCTE = `employee_list AS (SELECT 'DUMMY' AS nrp, 'OTHER' AS company, 'DUMMY' AS name)`;
-        }
     }
-    const query = `
-        WITH 
-        weight_config AS (
-            SELECT 10.0 AS w_kehadiran, 0.2 AS w_persen_hadir, 5.0 AS w_terlambat, 15.0 AS w_tidak_masuk, 2.0 AS w_lupa_masuk, 2.0 AS w_lupa_pulang      
-        ),
-        oc_dinas AS (
-            SELECT CAST(tanggal AS DATE) AS dinas_tanggal, nrp, nama AS dinas_nama, keperluan
-            FROM (VALUES ${dinasValues}) AS d(tanggal, nrp, nama, keperluan) WHERE nrp != 'DUMMY'
-        ),
-        calendar AS (
-            SELECT CAST(@startDate AS DATE) AS tgl
+
+    // --- 1. DETEKSI MODE SHIFT UNTUK NON-DEVS ---
+    const isShiftMode = role === 'non-devs';
+
+    // --- 2. DYNAMIC CTE UNTUK RAW ATTENDANCE (MENDUKUNG LINTAS HARI JIKA SHIFT) ---
+    const attendanceRawCTE = isShiftMode ? `
+        combined_raw AS (
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily_history]
+            WHERE attendance_date BETWEEN DATEADD(DAY, -1, CAST(@startDate AS DATE)) AND DATEADD(DAY, 1, CAST(@endDate AS DATE))
             UNION ALL
-            SELECT DATEADD(DAY, 1, tgl) FROM calendar
-            WHERE tgl < CAST(@endDate AS DATE) AND tgl < CAST(GETDATE() AS DATE)
+            SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
+            FROM [db_attendance].[attend].[tbl_t_att_daily]
+            WHERE attendance_date BETWEEN DATEADD(DAY, -1, CAST(@startDate AS DATE)) AND DATEADD(DAY, 1, CAST(@endDate AS DATE))
         ),
-        holiday_list AS (
-            SELECT CAST(tanggal AS DATE) AS tanggal, UPPER(keterangan) AS keterangan
-            FROM (VALUES ${holidayValues}) AS h(tanggal, keterangan) WHERE keterangan != 'DUMMY'
+        cleaned_raw AS (
+            SELECT nrp, attendance_date, trans, MIN(att_time) AS att_time
+            FROM combined_raw WHERE trans = 'IN' GROUP BY nrp, attendance_date, trans
+            UNION ALL
+            SELECT nrp, attendance_date, trans, MAX(att_time) AS att_time
+            FROM combined_raw WHERE trans = 'OUT' GROUP BY nrp, attendance_date, trans
         ),
-        ${employeeListCTE},
-        surat_izin AS (
-            SELECT CAST(tanggal AS DATE) AS izin_tanggal, nrp, keperluan
-            FROM (VALUES ${suratIzinValues}) AS s(tanggal, nrp, keperluan) WHERE nrp != 'DUMMY'
-        ),
-        base_data AS (
-            SELECT c.tgl, e.nrp, e.company, e.name FROM calendar c CROSS JOIN employee_list e
-        ),
+        attendance_calc AS (
+            SELECT 
+                b.tgl AS attendance_date, b.nrp,
+                (SELECT MIN(att_time) FROM cleaned_raw r WHERE r.nrp = b.nrp AND r.trans = 'IN' AND (r.attendance_date = b.tgl OR (r.attendance_date = DATEADD(DAY, 1, b.tgl) AND r.att_time < '04:00:00'))) AS raw_in,
+                (SELECT MAX(att_time) FROM cleaned_raw r WHERE r.nrp = b.nrp AND r.trans = 'OUT' AND ((r.attendance_date = b.tgl AND r.att_time >= '12:00:00') OR (r.attendance_date = DATEADD(DAY, 1, b.tgl) AND r.att_time < '12:00:00'))) AS raw_out
+            FROM base_data b
+        )` : `
         data_raw AS (
             SELECT nrp, CAST(attendance_date AS DATE) AS attendance_date, CAST(attendance_hour AS TIME) AS att_time, trans
             FROM [db_attendance].[attend].[tbl_t_att_daily_history]
@@ -507,33 +491,69 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         attendance_calc AS (
             SELECT nrp, attendance_date, MIN(CASE WHEN trans = 'IN' THEN att_time END) AS raw_in, MAX(CASE WHEN trans = 'OUT' THEN att_time END) AS raw_out
             FROM data_raw GROUP BY nrp, attendance_date
+        )`;
+
+    const query = `
+        WITH 
+        weight_config AS (
+            SELECT 10.0 AS w_kehadiran, 0.2 AS w_persen_hadir, 5.0 AS w_terlambat, 15.0 AS w_tidak_masuk, 2.0 AS w_lupa_masuk, 2.0 AS w_lupa_pulang      
         ),
+        oc_dinas AS (
+            SELECT CAST(tanggal AS DATE) AS dinas_tanggal, nrp, nama AS dinas_nama, keperluan
+            FROM (VALUES ${dinasValues}) AS d(tanggal, nrp, nama, keperluan) WHERE nrp != 'DUMMY'
+        ),
+        surat_izin AS (
+            SELECT CAST(tanggal AS DATE) AS izin_tanggal, nrp, keperluan
+            FROM (VALUES ${suratIzinValues}) AS s(tanggal, nrp, keperluan) WHERE nrp != 'DUMMY'
+        ),
+        calendar AS (
+            SELECT CAST(@startDate AS DATE) AS tgl
+            UNION ALL
+            SELECT DATEADD(DAY, 1, tgl) FROM calendar
+            WHERE tgl < CAST(@endDate AS DATE) AND tgl < CAST(GETDATE() AS DATE)
+        ),
+        holiday_list AS (
+            SELECT CAST(tanggal AS DATE) AS tanggal, UPPER(keterangan) AS keterangan
+            FROM (VALUES ${holidayValues}) AS h(tanggal, keterangan) WHERE keterangan != 'DUMMY'
+        ),        
+        ${employeeListCTE},
+        base_data AS (
+            SELECT c.tgl, e.nrp, e.company, e.name FROM calendar c CROSS JOIN employee_list e
+        ),
+        ${attendanceRawCTE},
         daily_status AS (
             SELECT
                 b.nrp, b.name, b.company, b.tgl AS attendance_date,
                 FORMAT(b.tgl, 'MMMM', 'id-ID') AS bulan, MONTH(b.tgl) AS month_num,
                 a.raw_in, a.raw_out, d.keperluan AS dinas_keperluan,
-                si.keperluan AS izin_keperluan, /* NEW: Ambil Keterangan Izin */
-                CASE WHEN h.tanggal IS NOT NULL THEN 1 WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1 ELSE 0 END AS is_holiday
+                si.keperluan AS izin_keperluan,
+                CASE WHEN h.tanggal IS NOT NULL THEN 1 WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1 ELSE 0 END AS is_holiday,
+                ${isShiftMode ? `
+                CASE
+                    WHEN a.raw_in >= '04:00:00' AND a.raw_in < '11:00:00' THEN CAST('07:00:00' AS TIME)
+                    WHEN a.raw_in >= '11:00:00' AND a.raw_in < '14:00:00' THEN CAST('12:00:00' AS TIME)
+                    WHEN a.raw_in >= '14:00:00' AND a.raw_in < '19:00:00' THEN CAST('15:00:00' AS TIME)
+                    ELSE CAST('23:00:00' AS TIME)
+                END` : `CAST('07:30:00' AS TIME)`} AS scheduled_shift
             FROM base_data b
             LEFT JOIN attendance_calc a ON b.tgl = a.attendance_date AND b.nrp = a.nrp
             LEFT JOIN holiday_list h ON b.tgl = h.tanggal
             LEFT JOIN oc_dinas d ON b.tgl = d.dinas_tanggal AND b.nrp = d.nrp
-            LEFT JOIN surat_izin si ON b.tgl = si.izin_tanggal AND b.nrp = si.nrp /* NEW: Join ke tabel Izin */
+            LEFT JOIN surat_izin si ON b.tgl = si.izin_tanggal AND b.nrp = si.nrp
         ),
         final_status AS (
             SELECT *,
                 CASE
                     WHEN raw_in IS NULL AND raw_out IS NULL AND dinas_keperluan IS NOT NULL THEN 'DINAS'
-                    WHEN izin_keperluan IS NOT NULL THEN 'IZIN' /* NEW: Anggap Izin jika ada surat */
+                    WHEN izin_keperluan IS NOT NULL THEN 'IZIN'
                     WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 0 THEN 'TIDAK MASUK'
                     WHEN raw_in IS NULL AND raw_out IS NULL AND is_holiday = 1 THEN 'LIBUR'
                     WHEN raw_in IS NOT NULL AND raw_out IS NULL THEN 'LUPA TAP PULANG'
                     WHEN raw_in IS NULL AND raw_out IS NOT NULL THEN 'LUPA TAP MASUK'
-                    WHEN raw_in > '07:30:00' THEN 'TERLAMBAT'
+                    WHEN raw_in > scheduled_shift THEN 'TERLAMBAT'
                     ELSE 'TEPAT WAKTU'
                 END AS status_detail,
-                CASE WHEN raw_in > '07:30:00' THEN 1 ELSE 0 END AS status_telat
+                CASE WHEN raw_in > scheduled_shift THEN 1 ELSE 0 END AS status_telat
             FROM daily_status
         ),
         aggregated_data AS (
