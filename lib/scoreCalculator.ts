@@ -325,6 +325,7 @@ export function generateLeaderboard(
 
             // --- REAL-TIME BADGES ---
             isDinasToday: devAtt ? devAtt.isDinasToday : false,
+            isIzinToday: devAtt ? devAtt.isIzinToday : false,
             isActiveToday: devAtt ? devAtt.isActiveToday : false,
             isLupaTapOutYesterday: devAtt ? devAtt.isLupaTapOutYesterday : false,
             isLupaTapInToday: devAtt ? devAtt.isLupaTapInToday : false,

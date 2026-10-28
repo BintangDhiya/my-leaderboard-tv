@@ -16,10 +16,8 @@ const pgPool = new Pool({
     database: process.env.PG_DB_NAME || 'digi_db',
 });
 
-// Fungsi pembantu untuk menarik dan mengekspansi tanggal dari Postgres
 async function getSuratIzinValuesSQL(startDate: string, endDate: string): Promise<string> {
     try {
-        // Ambil data yang beririsan dengan filter tanggal saat ini (Misal status_pengajuan_id = 1 untuk disetujui)
         const query = `
             SELECT nrp_pemilik, tanggal_mulai, tanggal_selesai, keterangan 
             FROM digi.tbl_t_pengajuan_surat
@@ -27,27 +25,18 @@ async function getSuratIzinValuesSQL(startDate: string, endDate: string): Promis
             AND status_pengajuan_id = 2 -- Sesuaikan dengan ID status "2: Disetujui, 1: Menunggu"
         `;
         const { rows } = await pgPool.query(query, [startDate, endDate]);
+        if (rows.length === 0) return "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY')";
 
-        if (rows.length === 0) return "('1900-01-01', 'DUMMY', 'DUMMY')";
+        const values = rows.map(row => {
+            const startStr = new Date(row.tanggal_mulai).toISOString().split('T')[0];
+            const endStr = new Date(row.tanggal_selesai).toISOString().split('T')[0];
+            const ket = (row.keterangan || 'Izin/Sakit').replace(/'/g, "''");
+            return `('${startStr}', '${endStr}', '${row.nrp_pemilik}', '${ket}')`;
+        });
 
-        const values = [];
-        for (const row of rows) {
-            // Karena izin bisa lebih dari 1 hari, kita ekspansi tanggalnya (contoh: 6-7 Okt menjadi 2 baris)
-            let current = new Date(row.tanggal_mulai);
-            const end = new Date(row.tanggal_selesai);
-
-            while (current <= end) {
-                const dateStr = current.toISOString().split('T')[0];
-                const ket = (row.keterangan || 'Izin/Sakit').replace(/'/g, "''"); // Escape single quotes
-                values.push(`('${dateStr}', '${row.nrp_pemilik}', '${ket}')`);
-                current.setDate(current.getDate() + 1);
-            }
-        }
-
-        return values.length > 0 ? values.join(',\n') : "('1900-01-01', 'DUMMY', 'DUMMY')";
+        return values.join(',\n');
     } catch (e) {
-        console.error("[Postgres] Gagal mengambil surat izin:", e);
-        return "('1900-01-01', 'DUMMY', 'DUMMY')";
+        return "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY')";
     }
 }
 
@@ -141,6 +130,45 @@ export async function getAttDbPool(): Promise<sql.ConnectionPool> {
             });
     }
     return attPoolPromise;
+}
+
+// =========================================================
+// PAMA SHARE DB CONNECTION (clawsqco404)
+// =========================================================
+let pamaPoolPromise: Promise<sql.ConnectionPool> | null = null;
+
+export function getPamaDbConfig(): sql.config {
+    return {
+        user: process.env.PAMA_DB_USER || '',
+        password: process.env.PAMA_DB_PASSWORD || '',
+        server: process.env.PAMA_DB_SERVER || 'clawsqco404',
+        port: process.env.PAMA_DB_PORT ? parseInt(process.env.PAMA_DB_PORT, 10) : 1433,
+        database: process.env.PAMA_DB_NAME || 'db_share',
+        options: {
+            encrypt: process.env.PAMA_DB_ENCRYPT === 'true',
+            trustServerCertificate: process.env.PAMA_DB_TRUST_SERVER_CERT !== 'false',
+            connectTimeout: 8000,
+            requestTimeout: 20000,
+        },
+        pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
+    };
+}
+
+export async function getPamaDbPool(): Promise<sql.ConnectionPool> {
+    const config = getPamaDbConfig();
+    if (!pamaPoolPromise) {
+        pamaPoolPromise = new sql.ConnectionPool(config)
+            .connect()
+            .then((pool) => {
+                console.log(`[MSSQL] Successfully connected to PAMA DB at ${config.server}:${config.port}/${config.database}`);
+                return pool;
+            })
+            .catch((err) => {
+                pamaPoolPromise = null;
+                throw err;
+            });
+    }
+    return pamaPoolPromise;
 }
 
 export const DEV_NRPS = [
@@ -273,68 +301,68 @@ function getHolidayValuesSQL(): string {
 function getDinasValuesSQL(): string {
     try {
         const filePath = path.join(process.cwd(), 'data', 'master-list-dinas.csv');
-        if (!fs.existsSync(filePath)) return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+        if (!fs.existsSync(filePath)) return "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
         const records = parse(fs.readFileSync(filePath, 'utf-8'), { columns: true, skip_empty_lines: true });
-        if (records.length === 0) return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
-        return records.map((r: any) => `('${r.tanggal}', '${r.nrp}', '${r.nama.replace(/'/g, "''")}', '${r.keperluan.replace(/'/g, "''")}')`).join(',\n');
+        if (records.length === 0) return "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+
+        // UBAH BARIS INI: Tambahkan r.tanggal dua kali (sebagai start dan end)
+        return records.map((r: any) => `('${r.tanggal}', '${r.tanggal}', '${r.nrp}', '${r.nama.replace(/'/g, "''")}', '${r.keperluan.replace(/'/g, "''")}')`).join(',\n');
     } catch (e) {
-        return "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
+        return "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')";
     }
 }
 
-function getPamaSuratValuesSQL(): { dinas: string, izin: string } {
+// Fungsi ini sekarang menjadi ASYNC dan membutuhkan parameter tanggal
+async function getPamaSuratValuesSQL(startDateStr: string, endDateStr: string): Promise<{ dinas: string, izin: string }> {
     try {
-        const filePath = path.join(process.cwd(), 'data', 'pama-list-dinas.csv');
-        if (!fs.existsSync(filePath)) return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+        const pool = await getPamaDbPool();
+        const request = pool.request();
 
-        const records = parse(fs.readFileSync(filePath, 'utf-8'), { columns: true, skip_empty_lines: true }) as any;
-        if (records.length === 0) return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+        request.input('startDate', sql.Date, startDateStr);
+        request.input('endDate', sql.Date, endDateStr);
+
+        const query = `
+            SELECT NRP AS nrp, NAME AS name, START_DATE_CONV AS start_date, END_DATE_CONV AS end_date, 
+                   KEPERLUAN AS keperluan, TIPE_SURAT AS tipe_surat
+            FROM tbl_dwh_surat_cuti_dinas
+            WHERE START_DATE_CONV <= @endDate AND END_DATE_CONV >= @startDate
+            AND nrp IN ( '61130821', '61182334', '61120509', '61182183', '61080350', 
+            '61122848', '61130579', '61080415', '61091374', '61122031', '61113137', '61170506', 
+            '61102581', '61120560', '61101597', '61070370', '61240197', '61150502', '61060645', 
+            '61140314', '61182672', '61130109', '61120955', '61060374', '61101151', '61140270', '61111398')
+        `;
+
+        const result = await request.query(query);
+
+        if (result.recordset.length === 0) {
+            return { dinas: "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY')" };
+        }
 
         const dinasVals: string[] = [];
         const izinVals: string[] = [];
 
-        for (const row of records) {
-            // Pecah string tanggal untuk menghindari bug Timezone Shift pada objek Date JavaScript
-            const [yStart, mStart, dStart] = (row.START_DATE_CONV || '').split('/');
-            const [yEnd, mEnd, dEnd] = (row.END_DATE_CONV || '').split('/');
+        for (const row of result.recordset) {
+            const startStr = new Date(row.start_date).toISOString().split('T')[0];
+            const endStr = new Date(row.end_date).toISOString().split('T')[0];
+            const nrp = String(row.nrp).trim();
+            const nama = String(row.name || '').replace(/'/g, "''");
+            const keperluan = String(row.keperluan || row.tipe_surat || '').replace(/'/g, "''");
+            const tipeSurat = String(row.tipe_surat || '').trim().toUpperCase();
 
-            if (!yStart || !yEnd) continue;
-
-            let current = new Date(Number(yStart), Number(mStart) - 1, Number(dStart));
-            const end = new Date(Number(yEnd), Number(mEnd) - 1, Number(dEnd));
-
-            const nrp = String(row.NRP).trim();
-            const nama = (row.NAME || '').replace(/'/g, "''"); // Escape petik tunggal untuk SQL
-            const keperluan = (row.KEPERLUAN || row.TIPE_SURAT || '').replace(/'/g, "''");
-            const tipeSurat = (row.TIPE_SURAT || '').trim().toUpperCase();
-
-            // Ekspansi tanggal (jika dari tgl 19 s/d 24, maka akan dicetak 6 baris)
-            while (current <= end) {
-                const yOut = current.getFullYear();
-                const mOut = String(current.getMonth() + 1).padStart(2, '0');
-                const dOut = String(current.getDate()).padStart(2, '0');
-                const dateStr = `${yOut}-${mOut}-${dOut}`;
-
-                // Jika Tipe ST (Surat Tugas) masukkan ke CTE Dinas, selain itu CTE Izin/Cuti
-                if (tipeSurat === 'ST') {
-                    // Sesuai format CTE oc_dinas: (tanggal, nrp, nama, keperluan)
-                    dinasVals.push(`('${dateStr}', '${nrp}', '${nama}', '${keperluan}')`);
-                } else {
-                    // Sesuai format CTE surat_izin: (tanggal, nrp, keperluan)
-                    izinVals.push(`('${dateStr}', '${nrp}', '${keperluan}')`);
-                }
-
-                current.setDate(current.getDate() + 1); // Lanjut ke +1 Hari berikutnya
+            // LANGSUNG PUSH RANGE TANGGAL (Tanpa Loop)
+            if (tipeSurat === 'ST') {
+                dinasVals.push(`('${startStr}', '${endStr}', '${nrp}', '${nama}', '${keperluan}')`);
+            } else {
+                izinVals.push(`('${startStr}', '${endStr}', '${nrp}', '${keperluan}')`);
             }
         }
 
         return {
-            dinas: dinasVals.length > 0 ? dinasVals.join(',\n            ') : "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')",
-            izin: izinVals.length > 0 ? izinVals.join(',\n            ') : "('1900-01-01', 'DUMMY', 'DUMMY')"
+            dinas: dinasVals.length > 0 ? dinasVals.join(',\n            ') : "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')",
+            izin: izinVals.length > 0 ? izinVals.join(',\n            ') : "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY')"
         };
     } catch (e) {
-        console.error("[PAMA Surat] Error membaca CSV pama-list-dinas:", e);
-        return { dinas: "('1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', 'DUMMY', 'DUMMY')" };
+        return { dinas: "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY', 'DUMMY')", izin: "('1900-01-01', '1900-01-01', 'DUMMY', 'DUMMY')" };
     }
 }
 
@@ -383,18 +411,17 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
     request.input('currentTime', sql.VarChar(8), currentTimeStr);
 
     // Get CSV Data as VALUES snippet
+    // 1. Tarik referensi Universal & Role Default (Devs & Non-Devs)
     const holidayValues = getHolidayValuesSQL();
-    let dinasValues = getDinasValuesSQL();
-    let suratIzinValues = await getSuratIzinValuesSQL(startDateStr, endDateStr);
-    const suratIzinValuesDummy = `
-('2026-10-15', 'JI260374', 'diagnosis : demam'),
-('2026-10-16', 'JI260374', 'diagnosis : demam')
-    `
+    let dinasValues = getDinasValuesSQL(); // Dari master-list-dinas.csv
+    let suratIzinValues = await getSuratIzinValuesSQL(startDateStr, endDateStr); // Dari Postgres
 
     const role = filterOptions?.role || 'devs';
 
+    // 2. TIMPA (OVERRIDE) VARIABEL JIKA ROLE = 'pama'
     if (role === 'pama') {
-        const pamaSurat = getPamaSuratValuesSQL();
+        // --- UBAH BAGIAN INI MENJADI AWAIT ---
+        const pamaSurat = await getPamaSuratValuesSQL(startDateStr, endDateStr);
         dinasValues = pamaSurat.dinas;
         suratIzinValues = pamaSurat.izin;
     }
@@ -499,12 +526,12 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             SELECT 10.0 AS w_kehadiran, 0.2 AS w_persen_hadir, 5.0 AS w_terlambat, 15.0 AS w_tidak_masuk, 2.0 AS w_lupa_masuk, 2.0 AS w_lupa_pulang      
         ),
         oc_dinas AS (
-            SELECT CAST(tanggal AS DATE) AS dinas_tanggal, nrp, nama AS dinas_nama, keperluan
-            FROM (VALUES ${dinasValues}) AS d(tanggal, nrp, nama, keperluan) WHERE nrp != 'DUMMY'
+            SELECT CAST(start_date AS DATE) AS dinas_start, CAST(end_date AS DATE) AS dinas_end, nrp, nama AS dinas_nama, keperluan
+            FROM (VALUES ${dinasValues}) AS d(start_date, end_date, nrp, nama, keperluan) WHERE nrp != 'DUMMY'
         ),
         surat_izin AS (
-            SELECT CAST(tanggal AS DATE) AS izin_tanggal, nrp, keperluan
-            FROM (VALUES ${suratIzinValues}) AS s(tanggal, nrp, keperluan) WHERE nrp != 'DUMMY'
+            SELECT CAST(start_date AS DATE) AS izin_start, CAST(end_date AS DATE) AS izin_end, nrp, keperluan
+            FROM (VALUES ${suratIzinValues}) AS s(start_date, end_date, nrp, keperluan) WHERE nrp != 'DUMMY'
         ),
         calendar AS (
             SELECT CAST(@startDate AS DATE) AS tgl
@@ -525,7 +552,8 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             SELECT
                 b.nrp, b.name, b.company, b.tgl AS attendance_date,
                 FORMAT(b.tgl, 'MMMM', 'id-ID') AS bulan, MONTH(b.tgl) AS month_num,
-                a.raw_in, a.raw_out, d.keperluan AS dinas_keperluan,
+                a.raw_in, a.raw_out, 
+                d.keperluan AS dinas_keperluan,
                 si.keperluan AS izin_keperluan,
                 CASE WHEN h.tanggal IS NOT NULL THEN 1 WHEN DATEPART(WEEKDAY, b.tgl) IN (1, 7) THEN 1 ELSE 0 END AS is_holiday,
                 ${isShiftMode ? `
@@ -538,8 +566,9 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             FROM base_data b
             LEFT JOIN attendance_calc a ON b.tgl = a.attendance_date AND b.nrp = a.nrp
             LEFT JOIN holiday_list h ON b.tgl = h.tanggal
-            LEFT JOIN oc_dinas d ON b.tgl = d.dinas_tanggal AND b.nrp = d.nrp
-            LEFT JOIN surat_izin si ON b.tgl = si.izin_tanggal AND b.nrp = si.nrp
+            -- UBAH JOIN MENJADI RANGE BETWEEN:
+            LEFT JOIN oc_dinas d ON b.nrp = d.nrp AND b.tgl BETWEEN d.dinas_start AND d.dinas_end
+            LEFT JOIN surat_izin si ON b.nrp = si.nrp AND b.tgl BETWEEN si.izin_start AND si.izin_end
         ),
         final_status AS (
             SELECT *,
@@ -579,7 +608,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         ),
         dinas_text_summary AS (
             SELECT nrp, month_num, STRING_AGG(keperluan, ', ') AS gabungan_keterangan FROM (
-                SELECT DISTINCT nrp, MONTH(dinas_tanggal) AS month_num, keperluan FROM oc_dinas
+                SELECT DISTINCT nrp, MONTH(dinas_start) AS month_num, keperluan FROM oc_dinas
             ) x GROUP BY nrp, month_num
         ),
         scored_data AS (
@@ -613,11 +642,13 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 MAX(CASE WHEN r.attendance_date = CAST(@todayDate AS DATE) AND r.trans = 'OUT' THEN r.att_time END) as today_out,
                 MIN(CASE WHEN r.attendance_date = CAST(@yesterdayDate AS DATE) AND r.trans = 'IN' THEN r.att_time END) as yesterday_in,
                 MAX(CASE WHEN r.attendance_date = CAST(@yesterdayDate AS DATE) AND r.trans = 'OUT' THEN r.att_time END) as yesterday_out,
-                MAX(CASE WHEN d.dinas_tanggal = CAST(@todayDate AS DATE) THEN 1 ELSE 0 END) as is_dinas_today,
+                MAX(CASE WHEN CAST(@todayDate AS DATE) BETWEEN d.dinas_start AND d.dinas_end THEN 1 ELSE 0 END) as is_dinas_today,
+                MAX(CASE WHEN CAST(@todayDate AS DATE) BETWEEN si.izin_start AND si.izin_end THEN 1 ELSE 0 END) as is_izin_today, 
                 MAX(CASE WHEN h.tanggal = CAST(@todayDate AS DATE) THEN 1 ELSE 0 END) as is_holiday_today
             FROM employee_list e
             LEFT JOIN realtime_raw r ON e.nrp = r.nrp
-            LEFT JOIN oc_dinas d ON e.nrp = d.nrp AND d.dinas_tanggal = CAST(@todayDate AS DATE)
+            LEFT JOIN oc_dinas d ON e.nrp = d.nrp AND CAST(@todayDate AS DATE) BETWEEN d.dinas_start AND d.dinas_end
+            LEFT JOIN surat_izin si ON e.nrp = si.nrp AND CAST(@todayDate AS DATE) BETWEEN si.izin_start AND si.izin_end
             LEFT JOIN holiday_list h ON h.tanggal = CAST(@todayDate AS DATE)
             GROUP BY e.nrp
         ),
@@ -625,9 +656,10 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             SELECT 
                 nrp,
                 CAST(is_dinas_today AS BIT) AS isDinasToday,
+                CAST(is_izin_today AS BIT) AS isIzinToday,
                 CAST(CASE WHEN today_in IS NOT NULL AND today_out IS NULL THEN 1 ELSE 0 END AS BIT) AS isActiveToday,
                 CAST(CASE WHEN yesterday_in IS NOT NULL AND yesterday_out IS NULL THEN 1 ELSE 0 END AS BIT) AS isLupaTapOutYesterday,
-                CAST(CASE WHEN is_dinas_today = 0 AND is_holiday_today = 0 AND DATEPART(WEEKDAY, CAST(@todayDate AS DATE)) NOT IN (1, 7) AND CAST(@currentTime AS TIME) > '07:30:00' AND today_in IS NULL THEN 1 ELSE 0 END AS BIT) AS isLupaTapInToday
+                CAST(CASE WHEN is_dinas_today = 0 AND is_izin_today = 0 AND is_holiday_today = 0 AND DATEPART(WEEKDAY, CAST(@todayDate AS DATE)) NOT IN (1, 7) AND CAST(@currentTime AS TIME) > '07:30:00' AND today_in IS NULL THEN 1 ELSE 0 END AS BIT) AS isLupaTapInToday
             FROM realtime_base
         )
         -- === FINAL JOIN ===
@@ -641,6 +673,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             MAX(a.[Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat], MAX(a.[Keterangan Dinas]) AS [Keterangan Dinas],
             SUM(a.[Skor Akhir]) AS [Skor Akhir],
             MAX(CAST(rf.isDinasToday AS INT)) AS isDinasToday, MAX(CAST(rf.isActiveToday AS INT)) AS isActiveToday,
+            MAX(CAST(rf.isIzinToday AS INT)) AS isIzinToday,
             MAX(CAST(rf.isLupaTapOutYesterday AS INT)) AS isLupaTapOutYesterday, MAX(CAST(rf.isLupaTapInToday AS INT)) AS isLupaTapInToday
         FROM scored_data a
         LEFT JOIN realtime_flags rf ON a.nrp = rf.nrp
@@ -670,6 +703,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         keteranganDinas: row['Keterangan Dinas'] || '-',
         skorAkhir: Number(row['Skor Akhir'] || 0),
         isDinasToday: Boolean(row.isDinasToday),
+        isIzinToday: Boolean(row.isIzinToday),
         isActiveToday: Boolean(row.isActiveToday),
         isLupaTapOutYesterday: Boolean(row.isLupaTapOutYesterday),
         isLupaTapInToday: Boolean(row.isLupaTapInToday)

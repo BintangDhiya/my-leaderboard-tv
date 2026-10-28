@@ -12,6 +12,9 @@ export const renderBadges = (dev: DeveloperStats) => {
     if (dev.isDinasToday) {
         badges.push(<span key="dinas" className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[9px] font-bold uppercase tracking-wider">Dinas</span>);
     }
+    if (dev.isIzinToday) {
+        badges.push(<span key="izin" className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[9px] font-bold uppercase tracking-wider">Cuti</span>);
+    }
     if (dev.isLupaTapInToday) {
         badges.push(<span key="no-in" className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[9px] font-bold uppercase tracking-wider">Belum Tap-IN (Today)</span>);
     }

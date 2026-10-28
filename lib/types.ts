@@ -50,6 +50,7 @@ export interface AttendanceSummary {
     keteranganDinas: string;
     skorAkhir: number;
     isDinasToday: boolean;
+    isIzinToday: boolean;
     isActiveToday: boolean;
     isLupaTapOutYesterday: boolean;
     isLupaTapInToday: boolean;
@@ -94,6 +95,7 @@ export interface DeveloperStats {
     feedbackTasks: number;   // status_id = 4 (Feedback)
 
     isDinasToday: boolean; // real-time badges
+    isIzinToday: boolean;
     isActiveToday: boolean;
     isLupaTapOutYesterday: boolean;
     isLupaTapInToday: boolean;
