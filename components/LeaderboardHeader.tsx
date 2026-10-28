@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Clock, Radio } from 'lucide-react';
+import { Flame, Clock, Radio, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react'; // <-- Tambahkan icon Arrow
 import { LeaderboardResponse } from '@/lib/types';
 import Image from 'next/image';
 
@@ -17,22 +17,15 @@ interface HeaderProps {
     customEnd: string;
     setCustomEnd: (date: string) => void;
     onApplyCustomRange: () => void;
+    // --- TAMBAHAN PROPS UNTUK SORTING ---
+    sortOrder: 'desc' | 'asc';
+    setSortOrder: (order: 'desc' | 'asc') => void;
 }
 
 export const LeaderboardHeader: React.FC<HeaderProps> = ({
-    data,
-    filter,
-    setFilter,
-    mode,
-    setMode,
-    role,
-    setRole,
-    lastUpdated,
-    customStart,
-    setCustomStart,
-    customEnd,
-    setCustomEnd,
-    onApplyCustomRange,
+    data, filter, setFilter, mode, setMode, role, setRole, lastUpdated,
+    customStart, setCustomStart, customEnd, setCustomEnd, onApplyCustomRange,
+    sortOrder, setSortOrder // <-- Ekstrak props baru
 }) => {
     return (
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
@@ -59,41 +52,42 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
 
             {/* Filter Tabs & Quick Team Stats */}
             <div className="flex items-center gap-4 flex-wrap">
-                {/* Rising Star Alert */}
-                {data.risingStar && (
-                    <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
-                        <Flame className="w-4 h-4 text-amber-400" />
-                        <span>Rising Star: {data.risingStar.name} (▲ +{data.risingStar.rankDelta})</span>
+                {/* Bagian Kiri: Rising Star & Sort Button */}
+                <div className="flex flex-col items-start gap-2 mr-2">
+                    {/* Rising Star Alert */}
+                    {data.risingStar && (
+                        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold w-full">
+                            <Flame className="w-4 h-4 text-amber-400" />
+                            <span>Rising Star: {data.risingStar.name} (▲ +{data.risingStar.rankDelta})</span>
+                        </div>
+                    )}
+
+                    {/* --- TAMBAHAN TOMBOL SORT BY SCORE --- */}
+                    <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 w-full justify-between items-center cursor-pointer select-none" onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}>
+                        <span className="text-xs font-bold text-neutral-400 pl-2">Sort by Score:</span>
+                        <button className="px-3 py-1 text-xs font-bold rounded-md transition-all bg-neutral-800 text-emerald-400 shadow flex items-center gap-1.5 cursor-pointer">
+                            {sortOrder === 'desc' ? (
+                                <><ArrowDownWideNarrow className="w-3.5 h-3.5" /> Descending</>
+                            ) : (
+                                <><ArrowUpNarrowWide className="w-3.5 h-3.5" /> Ascending</>
+                            )}
+                        </button>
                     </div>
-                )}
+                </div>
 
                 {/* Mode Filter Buttons */}
                 <div className="flex flex-col gap-2 mr-2">
-                    {/* Mode Filter Buttons */}
                     <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 w-fit">
-                        <button onClick={() => setMode('task')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'task' ? 'bg-neutral-800 text-purple-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                            Task Only
-                        </button>
-                        <button onClick={() => setMode('attendance')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'attendance' ? 'bg-neutral-800 text-blue-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                            Attendance
-                        </button>
-                        <button onClick={() => setMode('both')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'both' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                            Combined
-                        </button>
+                        <button onClick={() => setMode('task')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'task' ? 'bg-neutral-800 text-purple-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Task Only</button>
+                        <button onClick={() => setMode('attendance')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'attendance' ? 'bg-neutral-800 text-blue-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Attendance</button>
+                        <button onClick={() => setMode('both')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'both' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Combined</button>
                     </div>
 
-                    {/* Role Filter Buttons */}
                     <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 w-fit">
-                        <button onClick={() => setRole('devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                            Devs (11)
-                        </button>
-                        <button onClick={() => setRole('non-devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'non-devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                            Non-Devs
-                        </button>
+                        <button onClick={() => setRole('devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Devs (11)</button>
+                        <button onClick={() => setRole('non-devs')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'non-devs' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Non-Devs</button>
                         {mode == 'attendance' && (
-                            <button onClick={() => setRole('pama')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'pama' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>
-                                PAMA
-                            </button>
+                            <button onClick={() => setRole('pama')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${role === 'pama' ? 'bg-neutral-800 text-teal-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>PAMA</button>
                         )}
                     </div>
                 </div>
@@ -101,67 +95,18 @@ export const LeaderboardHeader: React.FC<HeaderProps> = ({
                 {/* Date Filter Buttons */}
                 <div className="flex flex-col items-start gap-2 h-[stretch]">
                     <div className="inline-flex rounded-lg bg-neutral-900 border border-neutral-800 p-1 items-center">
-                        <button
-                            onClick={() => {
-                                setFilter('this_month');
-                                setCustomStart('');
-                                setCustomEnd('');
-                            }}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'this_month'
-                                ? 'bg-neutral-800 text-yellow-400 shadow'
-                                : 'text-neutral-400 hover:text-neutral-200'
-                                }`}
-                        >
-                            This Month
-                        </button>
-                        <button
-                            onClick={() => {
-                                setFilter('all');
-                                setCustomStart('');
-                                setCustomEnd('');
-                            }}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'all'
-                                ? 'bg-neutral-800 text-yellow-400 shadow'
-                                : 'text-neutral-400 hover:text-neutral-200'
-                                }`}
-                        >
-                            All-Time
-                        </button>
-                        <button
-                            onClick={() => setFilter('custom')}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'custom'
-                                ? 'bg-neutral-800 text-yellow-400 shadow'
-                                : 'text-neutral-400 hover:text-neutral-200'
-                                }`}
-                        >
-                            Custom
-                        </button>
+                        <button onClick={() => { setFilter('this_month'); setCustomStart(''); setCustomEnd(''); }} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'this_month' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>This Month</button>
+                        <button onClick={() => { setFilter('all'); setCustomStart(''); setCustomEnd(''); }} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'all' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>All-Time</button>
+                        <button onClick={() => setFilter('custom')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'custom' ? 'bg-neutral-800 text-yellow-400 shadow' : 'text-neutral-400 hover:text-neutral-200'}`}>Custom</button>
                     </div>
 
                     {/* Custom Date Range Inputs (Hanya Muncul jika Filter = Custom) */}
                     {filter === 'custom' && (
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800">
-                            <input
-                                type="date"
-                                value={customStart}
-                                onChange={(e) => setCustomStart(e.target.value)}
-                                className="bg-neutral-950 text-xs rounded px-2 py-1 border border-neutral-700 text-neutral-300 outline-none cursor-pointer focus:border-yellow-500/50 [color-scheme:dark]"
-                            />
+                            <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="bg-neutral-950 text-xs rounded px-2 py-1 border border-neutral-700 text-neutral-300 outline-none cursor-pointer focus:border-yellow-500/50 [color-scheme:dark]" />
                             <span className="text-neutral-600 text-xs font-bold">-</span>
-                            <input
-                                type="date"
-                                value={customEnd}
-                                onChange={(e) => setCustomEnd(e.target.value)}
-                                className="bg-neutral-950 text-xs rounded px-2 py-1 border border-neutral-700 text-neutral-300 outline-none cursor-pointer focus:border-yellow-500/50 [color-scheme:dark]"
-                            />
-                            {/* TAMBAHKAN TOMBOL TERAPKAN INI */}
-                            <button
-                                onClick={onApplyCustomRange}
-                                disabled={!customStart || !customEnd}
-                                className="ml-1 px-3 py-1 text-[11px] font-bold rounded-md bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                            >
-                                Filter
-                            </button>
+                            <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="bg-neutral-950 text-xs rounded px-2 py-1 border border-neutral-700 text-neutral-300 outline-none cursor-pointer focus:border-yellow-500/50 [color-scheme:dark]" />
+                            <button onClick={onApplyCustomRange} disabled={!customStart || !customEnd} className="ml-1 px-3 py-1 text-[11px] font-bold rounded-md bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">Filter</button>
                         </div>
                     )}
                 </div>
