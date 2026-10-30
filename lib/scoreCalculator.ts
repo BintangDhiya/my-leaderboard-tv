@@ -322,6 +322,7 @@ export function generateLeaderboard(
             persentaseTerlambat: devAtt ? devAtt.persentaseTerlambat : '0%',
             persentaseTidakTerlambat: devAtt ? devAtt.persentaseTidakTerlambat : '0%',
             keteranganDinas: devAtt ? devAtt.keteranganDinas : '-',
+            keteranganIzin: devAtt ? devAtt.keteranganIzin : '-',
 
             // --- REAL-TIME BADGES ---
             isDinasToday: devAtt ? devAtt.isDinasToday : false,

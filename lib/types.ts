@@ -48,6 +48,7 @@ export interface AttendanceSummary {
     persentaseTerlambat: string;
     persentaseTidakTerlambat: string;
     keteranganDinas: string;
+    keteranganIzin: string;
     skorAkhir: number;
     isDinasToday: boolean;
     isIzinToday: boolean;
@@ -78,6 +79,7 @@ export interface DeveloperStats {
     persentaseTerlambat?: string;
     persentaseTidakTerlambat?: string;
     keteranganDinas?: string;
+    keteranganIzin?: string;
 
     // Skor
     taskScore: number;

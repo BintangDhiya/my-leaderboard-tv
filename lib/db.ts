@@ -611,6 +611,11 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 SELECT DISTINCT nrp, MONTH(dinas_start) AS month_num, keperluan FROM oc_dinas
             ) x GROUP BY nrp, month_num
         ),
+        izin_text_summary AS (
+            SELECT nrp, month_num, STRING_AGG(keperluan, ', ') AS gabungan_keterangan_izin FROM (
+                SELECT DISTINCT nrp, MONTH(izin_start) AS month_num, keperluan FROM surat_izin
+            ) y GROUP BY nrp, month_num
+        ),
         scored_data AS (
             SELECT
                 a.company, a.nrp, a.[Nama Karyawan], a.[Periode], a.month_num,
@@ -619,6 +624,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 ISNULL(CONCAT(a.pct_terlambat_num, '%'), '0%') AS [Persentase Terlambat],
                 ISNULL(CONCAT(a.pct_tidak_terlambat_num, '%'), '0%') AS [Persentase Tidak Terlambat],
                 dt.gabungan_keterangan AS [Keterangan Dinas],
+                it.gabungan_keterangan_izin AS [Keterangan Izin],
                 CAST(
                     (a.[Total Kehadiran] * w.w_kehadiran) + (ISNULL(a.pct_tidak_terlambat_num, 0) * w.w_persen_hadir)
                     - (a.[Total Terlambat] * w.w_terlambat) - (a.[Total Tidak Masuk] * w.w_tidak_masuk) 
@@ -626,6 +632,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
                 AS DECIMAL(10,2)) AS [Skor Akhir]
             FROM aggregated_data a CROSS JOIN weight_config w
             LEFT JOIN dinas_text_summary dt ON a.nrp = dt.nrp AND a.month_num = dt.month_num
+            LEFT JOIN izin_text_summary it ON a.nrp = it.nrp AND a.month_num = it.month_num 
         ),
         -- === CTE BARU: REAL-TIME BADGE FLAGS ===
         realtime_raw AS (
@@ -671,6 +678,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
             SUM(a.[Total Tidak Masuk]) AS [Total Tidak Masuk], SUM(a.[Total Lupa Tap Masuk]) AS [Total Lupa Tap Masuk],
             SUM(a.[Total Lupa Tap Pulang]) AS [Total Lupa Tap Pulang], MAX(a.[Persentase Terlambat]) AS [Persentase Terlambat],
             MAX(a.[Persentase Tidak Terlambat]) AS [Persentase Tidak Terlambat], MAX(a.[Keterangan Dinas]) AS [Keterangan Dinas],
+            MAX(a.[Keterangan Izin]) AS [Keterangan Izin],
             SUM(a.[Skor Akhir]) AS [Skor Akhir],
             MAX(CAST(rf.isDinasToday AS INT)) AS isDinasToday, MAX(CAST(rf.isActiveToday AS INT)) AS isActiveToday,
             MAX(CAST(rf.isIzinToday AS INT)) AS isIzinToday,
@@ -701,6 +709,7 @@ export async function getAttendanceFromDB(filterOptions?: GetFilter): Promise<At
         persentaseTerlambat: row['Persentase Terlambat'],
         persentaseTidakTerlambat: row['Persentase Tidak Terlambat'],
         keteranganDinas: row['Keterangan Dinas'] || '-',
+        keteranganIzin: row['Keterangan Izin'] || '-',
         skorAkhir: Number(row['Skor Akhir'] || 0),
         isDinasToday: Boolean(row.isDinasToday),
         isIzinToday: Boolean(row.isIzinToday),

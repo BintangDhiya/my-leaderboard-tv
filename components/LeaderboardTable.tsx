@@ -117,8 +117,32 @@ export const LeaderboardTable: React.FC<LeaderboardTableProps> = ({ chasers, mod
                                     <>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-emerald-400">{dev.totalHadir}</td>
                                         <td className="text-center font-mono text-xs font-bold text-emerald-600">{dev.totalWeekend}</td>
-                                        <td className="py-3 px-3 text-center font-mono text-xs font-bold text-sky-400">{dev.totalDinas}</td>
-                                        <td className="py-3 px-3 text-center font-mono text-xs font-bold text-indigo-400">{dev.totalIzin}</td>
+                                        <td className="py-3 px-3 text-center">
+                                            <div className="relative group inline-block">
+                                                <span className={`font-mono text-xs font-bold text-sky-400 ${dev.totalDinas > 0 ? 'cursor-help border-b border-dashed border-sky-400/50 pb-0.5' : ''}`}>
+                                                    {dev.totalDinas}
+                                                </span>
+                                                {dev.totalDinas > 0 && dev.keteranganDinas && dev.keteranganDinas !== '-' && (
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[250px] p-2 bg-neutral-800 text-neutral-200 text-[10px] font-sans font-normal rounded-md shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-pre-wrap text-left border border-neutral-700">
+                                                        <span className="font-bold text-sky-400 block mb-1">Detail Dinas:</span>
+                                                        {dev.keteranganDinas}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-3 text-center">
+                                            <div className="relative group inline-block">
+                                                <span className={`font-mono text-xs font-bold text-indigo-400 ${dev.totalIzin > 0 ? 'cursor-help border-b border-dashed border-indigo-400/50 pb-0.5' : ''}`}>
+                                                    {dev.totalIzin}
+                                                </span>
+                                                {dev.totalIzin > 0 && dev.keteranganIzin && dev.keteranganIzin !== '-' && (
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[250px] p-2 bg-neutral-800 text-neutral-200 text-[10px] font-sans font-normal rounded-md shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-pre-wrap text-left border border-neutral-700">
+                                                        <span className="font-bold text-indigo-400 block mb-1">Detail Izin/Cuti:</span>
+                                                        {dev.keteranganIzin}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-yellow-400">{dev.totalTelat}</td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-rose-400">{dev.totalTidakMasuk}</td>
                                         <td className="py-3 px-3 text-center font-mono text-xs font-bold text-orange-400">{dev.totalLupaTap}</td>
